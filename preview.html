@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SocialCall App Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0F0F1A; --surface: #1A1A2E; --card: #22223A; --card2: #2A2A45;
+    --primary: #FF4D79; --accent: #FF8C42;
+    --text: #FFFFFF; --text2: #B0B0C8; --hint: #6B6B8A;
+    --online: #2ECC71; --red: #E74C3C; --green: #27AE60;
+    --gold: #FFD700; --border: #2E2E50;
+    --grad: linear-gradient(135deg, #FF4D79, #FF8C42);
+    --bggrad: linear-gradient(180deg, #0F0F1A, #1A1A2E);
+  }
+  body { background: #111; display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 20px 10px; }
+
+  h1 { color: white; font-size: 22px; margin-bottom: 6px; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+  /* Screen nav tabs */
+  .nav-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; justify-content: center; }
+  .tab { padding: 8px 14px; border-radius: 20px; background: #222; color: #888;
+    cursor: pointer; font-size: 12px; border: 1px solid #333; transition: all .2s; }
+  .tab.active { background: var(--grad); color: white; border-color: transparent; }
+
+  /* Phone frame */
+  .phone { width: 375px; height: 780px; border-radius: 44px; background: #000;
+    border: 8px solid #222; box-shadow: 0 30px 80px rgba(0,0,0,.8), inset 0 0 0 1px #333;
+    overflow: hidden; position: relative; }
+  .notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 28px; background: #000; border-radius: 0 0 18px 18px; z-index: 999; }
+  .screen { width: 100%; height: 100%; overflow: hidden; position: relative; display: none; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* ── Common ── */
+  .bg { background: var(--bggrad); flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .safe { padding-top: 36px; }
+  .px { padding: 0 20px; }
+  .center { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; }
+  .logo-box { width: 72px; height: 72px; border-radius: 20px; background: var(--grad);
+    display: flex; align-items: center; justify-content: center; font-size: 32px;
+    box-shadow: 0 12px 30px rgba(255,77,121,.4); }
+  .logo-box.sm { width: 50px; height: 50px; border-radius: 14px; font-size: 22px; box-shadow: 0 8px 20px rgba(255,77,121,.4); }
+  .app-name { font-size: 28px; font-weight: 800; background: var(--grad);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .tagline { color: var(--text2); font-size: 13px; margin-top: 4px; }
+  .heading { color: var(--text); font-size: 22px; font-weight: 700; }
+  .heading-sm { color: var(--text); font-size: 16px; font-weight: 700; }
+  .body { color: var(--text2); font-size: 14px; line-height: 1.5; }
+  .caption { color: var(--hint); font-size: 11px; }
+  .label { color: var(--text); font-size: 13px; font-weight: 600; }
+  .label-sm { color: var(--text2); font-size: 11px; font-weight: 500; }
+  .gap4 { height: 4px; } .gap8 { height: 8px; } .gap12 { height: 12px; }
+  .gap16 { height: 16px; } .gap20 { height: 20px; } .gap24 { height: 24px; }
+  .gap32 { height: 32px; }
+  .row { display: flex; align-items: center; }
+  .spacer { flex: 1; }
+  .card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); }
+  .btn-grad { background: var(--grad); color: white; border: none; border-radius: 14px;
+    padding: 16px; font-size: 15px; font-weight: 700; width: 100%; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(255,77,121,.35); }
+  .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary);
+    border-radius: 14px; padding: 14px; font-size: 14px; font-weight: 600; width: 100%; cursor: pointer; }
+  .online-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--online); }
+  .chip { background: rgba(255,77,121,.12); border: 1px solid rgba(255,77,121,.3);
+    border-radius: 20px; padding: 4px 12px; color: var(--primary); font-size: 11px; display: inline-block; }
+  .wallet-chip { background: var(--grad); border-radius: 20px; padding: 6px 12px;
+    color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+  .divider { height: 1px; background: var(--border); margin: 0; }
+  .avatar { border-radius: 50%; object-fit: cover; background: var(--card2); display: flex; align-items: center; justify-content: center; color: var(--hint); font-size: 20px; }
+
+  /* ── Bottom Nav ── */
+  .bottom-nav { background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; padding: 8px 0 4px; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; padding: 4px; }
+  .nav-item .icon { font-size: 22px; }
+  .nav-item .nav-label { font-size: 10px; color: var(--hint); }
+  .nav-item.active .nav-label { color: var(--primary); }
+  .nav-item.active .icon { filter: drop-shadow(0 0 4px var(--primary)); }
+
+  /* ─── SPLASH ─── */
+  #splash .bg { align-items: center; justify-content: center; gap: 16px; }
+  .splash-ring { width: 100px; height: 100px; border-radius: 26px; background: var(--grad);
+    display: flex; align-items: center; justify-content: center; font-size: 44px;
+    box-shadow: 0 16px 40px rgba(255,77,121,.5); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 16px 40px rgba(255,77,121,.5)} 50%{box-shadow:0 16px 60px rgba(255,77,121,.8)} }
+
+  /* ─── LOGIN ─── */
+  #login .input-box { background: var(--card); border-radius: 14px; border: 1px solid var(--border);
+    display: flex; align-items: center; overflow: hidden; }
+  #login .cc { padding: 16px; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); white-space: nowrap; }
+  #login .phone-input { flex: 1; background: transparent; border: none; outline: none;
+    padding: 16px; color: var(--text); font-size: 15px; }
+  #login .phone-input::placeholder { color: var(--hint); }
+  .terms { text-align: center; color: var(--hint); font-size: 11px; line-height: 1.6; }
+  .terms span { color: var(--primary); }
+  .or-row { display: flex; align-items: center; gap: 12px; }
+  .or-line { flex: 1; height: 1px; background: var(--border); }
+  .host-btn { display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 16px; border: 1.5px solid var(--primary); border-radius: 14px; cursor: pointer; }
+
+  /* ─── OTP ─── */
+  .otp-boxes { display: flex; gap: 12px; justify-content: center; }
+  .otp-box { width: 54px; height: 58px; border-radius: 14px; border: 2px solid var(--primary);
+    background: var(--card); display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; color: var(--text); }
+  .otp-box:first-child { border-color: var(--primary); box-shadow: 0 0 12px rgba(255,77,121,.3); }
+
+  /* ─── HOME ─── */
+  .search-bar { background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+    padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .search-bar input { flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 14px; }
+  .search-bar input::placeholder { color: var(--hint); }
+  .cat-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .cat-scroll::-webkit-scrollbar { display: none; }
+  .cat-chip { padding: 6px 16px; border-radius: 20px; background: var(--card); border: 1px solid var(--border);
+    color: var(--hint); font-size: 12px; white-space: nowrap; cursor: pointer; }
+  .cat-chip.sel { background: var(--grad); color: white; border-color: transparent; }
+  .host-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .host-card { border-radius: 16px; overflow: hidden; position: relative; cursor: pointer;
+    aspect-ratio: 0.72; background: var(--card2); }
+  .host-card img { width: 100%; height: 100%; object-fit: cover; }
+  .host-card-overlay { position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,.85)); padding: 12px 10px 10px; }
+  .host-card-name { color: white; font-size: 13px; font-weight: 700; }
+  .host-card-rate { color: var(--text2); font-size: 10px; }
+  .host-card-badge { position: absolute; top: 8px; right: 8px; background: var(--online);
+    border-radius: 20px; padding: 2px 8px; font-size: 9px; color: white; font-weight: 700; }
+  .online-count { display: flex; align-items: center; gap: 6px; }
+
+  /* ─── HOST PROFILE ─── */
+  .hero { width: 100%; height: 260px; object-fit: cover; display: block; position: relative; }
+  .hero-wrap { position: relative; height: 260px; overflow: hidden; }
+  .hero-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .hero-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 80px;
+    background: linear-gradient(transparent, var(--bg, #0F0F1A)); }
+  .back-btn { position: absolute; top: 44px; left: 16px; width: 36px; height: 36px;
+    background: rgba(0,0,0,.5); border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; font-size: 16px; z-index: 10; }
+  .stars { color: var(--gold); font-size: 14px; letter-spacing: 1px; }
+  .price-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .price-card { border-radius: 14px; padding: 16px; text-align: center; cursor: pointer; }
+  .price-card.green { background: rgba(39,174,96,.1); border: 1px solid rgba(39,174,96,.3); }
+  .price-card.pink { background: rgba(255,77,121,.1); border: 1px solid rgba(255,77,121,.3); }
+  .price-card .pc-icon { font-size: 26px; margin-bottom: 6px; }
+  .price-card .pc-label { font-size: 11px; color: var(--text2); }
+  .price-card .pc-price { font-size: 13px; font-weight: 700; margin-top: 4px; }
+  .price-card.green .pc-price { color: var(--green); }
+  .price-card.pink .pc-price { color: var(--primary); }
+  .profile-scroll { flex: 1; overflow-y: auto; }
+  .profile-scroll::-webkit-scrollbar { display: none; }
+
+  /* ─── CALL ─── */
+  .call-bg { background: radial-gradient(ellipse at top, #2a0a1a, var(--bg)); flex: 1;
+    display: flex; flex-direction: column; align-items: center; padding: 60px 24px 40px; }
+  .call-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid rgba(255,77,121,.5);
+    background: var(--card); display: flex; align-items: center; justify-content: center;
+    font-size: 44px; box-shadow: 0 0 40px rgba(255,77,121,.3); margin-bottom: 20px; }
+  .call-name { color: white; font-size: 22px; font-weight: 700; }
+  .call-status { color: var(--primary); font-size: 13px; margin-top: 6px; }
+  .call-timer { color: var(--text2); font-size: 16px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .call-controls { display: flex; justify-content: space-around; width: 100%; margin-top: auto; }
+  .ctrl-btn { width: 60px; height: 60px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; flex-direction: column; cursor: pointer; }
+  .ctrl-btn .cb-icon { font-size: 22px; }
+  .ctrl-btn .cb-label { font-size: 9px; color: var(--text2); margin-top: 4px; }
+  .ctrl-btn.muted { background: var(--card2); }
+  .ctrl-btn.end { background: var(--red); box-shadow: 0 8px 20px rgba(231,76,60,.4); }
+  .ctrl-btn.speaker { background: var(--card2); }
+  .balance-bar { background: rgba(255,77,121,.1); border: 1px solid rgba(255,77,121,.2);
+    border-radius: 12px; padding: 8px 16px; display: flex; align-items: center;
+    gap: 8px; margin-top: 24px; width: 100%; }
+
+  /* ─── CHAT ─── */
+  .chat-header { background: var(--surface); padding: 44px 16px 12px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .chat-messages::-webkit-scrollbar { display: none; }
+  .msg { max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.5; }
+  .msg.recv { background: var(--card); color: var(--text); border-bottom-left-radius: 4px; align-self: flex-start; }
+  .msg.sent { background: var(--grad); color: white; border-bottom-right-radius: 4px; align-self: flex-end; }
+  .msg-time { font-size: 9px; color: var(--hint); margin-top: 3px; }
+  .recv-wrap { display: flex; flex-direction: column; align-items: flex-start; }
+  .sent-wrap { display: flex; flex-direction: column; align-items: flex-end; }
+  .chat-input-bar { background: var(--surface); border-top: 1px solid var(--border);
+    padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  .chat-input { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+    padding: 10px 16px; color: var(--text); font-size: 14px; outline: none; }
+  .chat-input::placeholder { color: var(--hint); }
+  .send-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--grad);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; }
+
+  /* ─── WALLET ─── */
+  .wallet-header { background: var(--surface); padding: 44px 20px 16px; border-bottom: 1px solid var(--border); }
+  .balance-card { background: var(--grad); border-radius: 20px; padding: 24px;
+    margin: 16px 20px; text-align: center; box-shadow: 0 12px 30px rgba(255,77,121,.35); }
+  .balance-label { color: rgba(255,255,255,.8); font-size: 12px; }
+  .balance-amt { color: white; font-size: 36px; font-weight: 800; margin: 4px 0; }
+  .recharge-btn { background: rgba(255,255,255,.2); border: 1.5px solid white;
+    color: white; border-radius: 12px; padding: 10px 24px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .txn-list { padding: 0 20px; }
+  .txn-item { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .txn-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .txn-icon.credit { background: rgba(39,174,96,.15); }
+  .txn-icon.debit { background: rgba(231,76,60,.15); }
+  .txn-amt.credit { color: var(--green); font-size: 14px; font-weight: 700; }
+  .txn-amt.debit { color: var(--red); font-size: 14px; font-weight: 700; }
+
+  /* ─── PROFILE ─── */
+  .prof-avatar { width: 90px; height: 90px; border-radius: 50%; background: rgba(255,77,121,.15);
+    display: flex; align-items: center; justify-content: center; font-size: 40px; position: relative; }
+  .prof-edit { position: absolute; bottom: 0; right: 0; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--grad); display: flex; align-items: center;
+    justify-content: center; font-size: 12px; }
+  .menu-item { background: var(--card); border-radius: 12px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px; margin-bottom: 8px; cursor: pointer; }
+  .menu-item .mi-icon { font-size: 20px; }
+  .menu-item .mi-label { flex: 1; font-size: 14px; color: var(--text); }
+  .menu-item .mi-arrow { color: var(--hint); font-size: 16px; }
+
+  /* ─── INCOMING CALL DIALOG ─── */
+  .dialog-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.7);
+    display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .dialog { background: var(--surface); border-radius: 24px; padding: 28px;
+    width: 300px; text-align: center; box-shadow: 0 0 60px rgba(255,77,121,.3); }
+  .ring-avatar { width: 90px; height: 90px; border-radius: 50%; border: 3px solid rgba(255,77,121,.4);
+    background: var(--card); display: flex; align-items: center; justify-content: center;
+    font-size: 38px; margin: 0 auto 16px; box-shadow: 0 0 30px rgba(255,77,121,.25); }
+  .inc-label { color: var(--primary); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .dialog-btns { display: flex; justify-content: space-around; margin-top: 28px; }
+  .d-btn { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 24px; cursor: pointer; }
+  .d-btn.decline { background: var(--red); box-shadow: 0 8px 20px rgba(231,76,60,.4); }
+  .d-btn.accept { background: var(--green); box-shadow: 0 8px 20px rgba(39,174,96,.4); }
+
+  /* Scrollable content */
+  .scroll { flex: 1; overflow-y: auto; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* Progress dots */
+  .dots { display: flex; gap: 6px; margin-top: 24px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+  .dot.active { background: var(--primary); width: 24px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>🎯 SocialCall App Preview</h1>
+<p class="subtitle">Click screens below to preview each screen</p>
+
+<div class="nav-tabs">
+  <div class="tab active" onclick="show('splash')">💫 Splash</div>
+  <div class="tab" onclick="show('login')">📱 Login</div>
+  <div class="tab" onclick="show('otp')">🔑 OTP</div>
+  <div class="tab" onclick="show('home')">🏠 Home</div>
+  <div class="tab" onclick="show('profile')">👤 Host Profile</div>
+  <div class="tab" onclick="show('call')">📞 Call</div>
+  <div class="tab" onclick="show('chat')">💬 Chat</div>
+  <div class="tab" onclick="show('wallet')">💳 Wallet</div>
+  <div class="tab" onclick="show('myprofile')">🙍 My Profile</div>
+  <div class="tab" onclick="show('incoming')">🔔 Incoming Call</div>
+</div>
+
+<div class="phone">
+  <div class="notch"></div>
+
+  <!-- ═══ SPLASH ═══ -->
+  <div class="screen active" id="splash">
+    <div class="bg" style="align-items:center;justify-content:center;">
+      <div class="splash-ring">❤️</div>
+      <div class="gap20"></div>
+      <div class="app-name">SocialCall</div>
+      <div class="tagline">Connect. Talk. Earn.</div>
+      <div class="dots">
+        <div class="dot active"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LOGIN ═══ -->
+  <div class="screen" id="login">
+    <div class="bg scroll" style="padding:0 24px;">
+      <div class="gap" style="height:64px;"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="logo-box">❤️</div>
+        <div class="gap16"></div>
+        <div class="heading" style="font-size:26px;">Welcome Back</div>
+        <div class="gap8"></div>
+        <div class="body" style="text-align:center;">Enter your phone number to continue</div>
+      </div>
+      <div style="height:48px;"></div>
+      <div class="label">Phone Number</div>
+      <div class="gap12"></div>
+      <div class="input-box">
+        <div class="cc">🇮🇳 +91 ▾</div>
+        <input class="phone-input" type="text" placeholder="98765 43210" value="98765 43210">
+      </div>
+      <div class="gap24"></div>
+      <button class="btn-grad" onclick="show('otp')">Send OTP</button>
+      <div class="gap20"></div>
+      <div class="terms">By continuing you agree to our <span>Terms of Service</span> and <span>Privacy Policy</span></div>
+      <div class="gap32"></div>
+      <div class="or-row">
+        <div class="or-line"></div>
+        <span class="caption" style="padding:0 12px;">OR</span>
+        <div class="or-line"></div>
+      </div>
+      <div class="gap16"></div>
+      <div class="host-btn">
+        <span style="font-size:16px;">🎙️</span>
+        <span class="label" style="color:var(--primary);">Become a Host &amp; Earn Money</span>
+      </div>
+      <div style="height:40px;"></div>
+    </div>
+  </div>
+
+  <!-- ═══ OTP ═══ -->
+  <div class="screen" id="otp">
+    <div class="bg" style="padding:0 24px;">
+      <div style="height:64px;"></div>
+      <div style="font-size:22px;cursor:pointer;" onclick="show('login')">←</div>
+      <div class="gap32"></div>
+      <div class="heading">Verify Phone</div>
+      <div class="gap8"></div>
+      <div class="body">We sent a 6-digit OTP to</div>
+      <div style="color:var(--text);font-weight:700;font-size:15px;margin-top:4px;">+91 98765 43210</div>
+      <div class="gap32"></div>
+      <div class="otp-boxes">
+        <div class="otp-box">4</div>
+        <div class="otp-box" style="border-color:var(--border);">8</div>
+        <div class="otp-box" style="border-color:var(--border);">_</div>
+        <div class="otp-box" style="border-color:var(--border);">_</div>
+        <div class="otp-box" style="border-color:var(--border);">_</div>
+        <div class="otp-box" style="border-color:var(--border);">_</div>
+      </div>
+      <div class="gap32"></div>
+      <button class="btn-grad" onclick="show('home')">Verify &amp; Login</button>
+      <div class="gap20"></div>
+      <div style="text-align:center;">
+        <span class="body">Didn't receive OTP? </span>
+        <span style="color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;">Resend in 45s</span>
+      </div>
+      <div style="flex:1;"></div>
+      <!-- Numeric keyboard hint -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">1</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">2</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">3</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">4</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">5</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">6</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">7</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">8</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">9</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--hint);font-size:13px;">⌫</div>
+        <div style="background:var(--card2);padding:14px;text-align:center;color:var(--text);font-size:18px;">0</div>
+        <div style="background:var(--primary);padding:14px;text-align:center;font-size:18px;">✓</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ HOME ═══ -->
+  <div class="screen" id="home">
+    <div class="bg" style="overflow:hidden;">
+      <div class="scroll" style="flex:1;">
+        <div style="height:36px;"></div>
+        <div class="px">
+          <!-- Header -->
+          <div class="row">
+            <div>
+              <div class="body">Good Evening! 👋</div>
+              <div class="heading">Find your host</div>
+            </div>
+            <div class="spacer"></div>
+            <div class="wallet-chip" onclick="show('wallet')">💳 Rs.200</div>
+          </div>
+          <div class="gap16"></div>
+          <!-- Search -->
+          <div class="search-bar">
+            <span style="font-size:18px;color:var(--hint);">🔍</span>
+            <input type="text" placeholder="Search by name...">
+          </div>
+          <div class="gap12"></div>
+          <!-- Categories -->
+          <div class="cat-scroll">
+            <div class="cat-chip sel">All</div>
+            <div class="cat-chip">Online</div>
+            <div class="cat-chip">Hindi</div>
+            <div class="cat-chip">English</div>
+            <div class="cat-chip">Tamil</div>
+            <div class="cat-chip">Telugu</div>
+          </div>
+          <div class="gap12"></div>
+          <!-- Online count -->
+          <div class="online-count">
+            <div class="online-dot"></div>
+            <span style="color:var(--online);font-size:12px;font-weight:600;">4 hosts online now</span>
+          </div>
+          <div class="gap12"></div>
+          <!-- Host grid -->
+          <div class="host-grid">
+            <div class="host-card" onclick="show('profile')">
+              <div style="width:100%;height:100%;background:linear-gradient(180deg,#3a1530,#1a0a20);display:flex;align-items:center;justify-content:center;font-size:60px;">👩</div>
+              <div class="host-card-badge">LIVE</div>
+              <div class="host-card-overlay">
+                <div class="host-card-name">Priya Sharma</div>
+                <div class="host-card-rate">⭐ 4.9 · ₹2/min</div>
+              </div>
+            </div>
+            <div class="host-card" onclick="show('profile')">
+              <div style="width:100%;height:100%;background:linear-gradient(180deg,#0a2a3a,#0a1520);display:flex;align-items:center;justify-content:center;font-size:60px;">👩‍🦱</div>
+              <div class="host-card-overlay">
+                <div class="host-card-name">Anjali Rao</div>
+                <div class="host-card-rate">⭐ 4.7 · ₹3/min</div>
+              </div>
+            </div>
+            <div class="host-card" onclick="show('profile')">
+              <div style="width:100%;height:100%;background:linear-gradient(180deg,#2a1a0a,#1a0f05);display:flex;align-items:center;justify-content:center;font-size:60px;">👩‍🎤</div>
+              <div class="host-card-badge">LIVE</div>
+              <div class="host-card-overlay">
+                <div class="host-card-name">Sneha Patil</div>
+                <div class="host-card-rate">⭐ 4.8 · ₹2/min</div>
+              </div>
+            </div>
+            <div class="host-card" onclick="show('profile')">
+              <div style="width:100%;height:100%;background:linear-gradient(180deg,#1a2a0a,#0f1a05);display:flex;align-items:center;justify-content:center;font-size:60px;">👩‍💼</div>
+              <div class="host-card-badge">LIVE</div>
+              <div class="host-card-overlay">
+                <div class="host-card-name">Kavya Nair</div>
+                <div class="host-card-rate">⭐ 5.0 · ₹4/min</div>
+              </div>
+            </div>
+          </div>
+          <div style="height:16px;"></div>
+        </div>
+      </div>
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item active"><div class="icon">🔭</div><div class="nav-label">Discover</div></div>
+        <div class="nav-item" onclick="show('chat')"><div class="icon">💬</div><div class="nav-label">Chats</div></div>
+        <div class="nav-item" onclick="show('wallet')"><div class="icon">💳</div><div class="nav-label">Wallet</div></div>
+        <div class="nav-item" onclick="show('myprofile')"><div class="icon">👤</div><div class="nav-label">Profile</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ HOST PROFILE ═══ -->
+  <div class="screen" id="profile">
+    <div class="bg" style="overflow:hidden;">
+      <div class="profile-scroll">
+        <!-- Hero image -->
+        <div class="hero-wrap">
+          <div style="width:100%;height:100%;background:linear-gradient(180deg,#3a1530,#1a0a20);display:flex;align-items:center;justify-content:center;font-size:100px;">👩</div>
+          <div class="hero-fade"></div>
+          <div class="back-btn" onclick="show('home')">←</div>
+          <div style="position:absolute;top:44px;right:12px;width:36px;height:36px;background:rgba(0,0,0,.5);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;">🤍</div>
+        </div>
+        <div style="padding:0 20px 20px;">
+          <!-- Name + online -->
+          <div class="row" style="margin-top:8px;">
+            <div class="heading" style="font-size:22px;flex:1;">Priya Sharma</div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="online-dot"></div>
+              <span style="color:var(--online);font-size:12px;font-weight:600;">Online</span>
+            </div>
+          </div>
+          <div class="gap8"></div>
+          <!-- Rating -->
+          <div class="row" style="gap:8px;">
+            <span class="stars">★★★★★</span>
+            <span style="color:var(--gold);font-size:12px;font-weight:700;">4.9</span>
+            <span class="label-sm" style="margin-left:8px;">📞 248 calls</span>
+            <span class="label-sm" style="margin-left:8px;">👥 1.2k</span>
+          </div>
+          <div class="gap12"></div>
+          <!-- Languages -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div class="chip">Hindi</div>
+            <div class="chip">English</div>
+            <div class="chip">Punjabi</div>
+          </div>
+          <div class="gap16"></div>
+          <!-- Bio -->
+          <div class="heading-sm">About</div>
+          <div class="gap8"></div>
+          <div class="body">Hey! I'm Priya 😊 I love having fun conversations. Let's talk about life, music, or anything you like! I'm here to make your day better. 💕</div>
+          <div class="gap20"></div>
+          <!-- Pricing -->
+          <div class="heading-sm">Call Rates</div>
+          <div class="gap12"></div>
+          <div class="price-cards">
+            <div class="price-card green" onclick="show('call')">
+              <div class="pc-icon">📞</div>
+              <div class="pc-label">Audio Call</div>
+              <div class="pc-price">₹2/min</div>
+            </div>
+            <div class="price-card pink" onclick="show('call')">
+              <div class="pc-icon">📹</div>
+              <div class="pc-label">Video Call</div>
+              <div class="pc-price">₹3/min</div>
+            </div>
+          </div>
+          <div class="gap16"></div>
+          <button class="btn-outline" onclick="show('chat')">💬 Send Message</button>
+          <div class="gap12"></div>
+          <button class="btn-grad" onclick="show('call')">📞 Audio Call  ₹2/min</button>
+          <div style="height:20px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CALL ═══ -->
+  <div class="screen" id="call">
+    <div class="bg call-bg">
+      <!-- Timer + back -->
+      <div style="position:absolute;top:44px;left:16px;font-size:22px;cursor:pointer;color:white;" onclick="show('profile')">←</div>
+      <div style="position:absolute;top:44px;right:16px;font-size:20px;color:var(--text2);">⋮</div>
+      <div style="height:20px;"></div>
+      <div class="call-avatar">👩</div>
+      <div class="call-name">Priya Sharma</div>
+      <div class="call-status">● Connected</div>
+      <div class="call-timer">02:34</div>
+      <!-- Balance bar -->
+      <div class="balance-bar">
+        <span style="font-size:14px;">💳</span>
+        <span class="label-sm" style="flex:1;">Balance: ₹196</span>
+        <span style="color:var(--primary);font-size:11px;font-weight:700;">~98 min left</span>
+      </div>
+      <div style="height:20px;"></div>
+      <!-- Gifts row -->
+      <div style="display:flex;gap:12px;margin-bottom:8px;">
+        <div style="text-align:center;cursor:pointer;"><div style="font-size:24px;">🌹</div><div class="caption" style="margin-top:2px;">₹5</div></div>
+        <div style="text-align:center;cursor:pointer;"><div style="font-size:24px;">❤️</div><div class="caption" style="margin-top:2px;">₹10</div></div>
+        <div style="text-align:center;cursor:pointer;"><div style="font-size:24px;">💎</div><div class="caption" style="margin-top:2px;">₹50</div></div>
+        <div style="text-align:center;cursor:pointer;"><div style="font-size:24px;">🚀</div><div class="caption" style="margin-top:2px;">₹15</div></div>
+      </div>
+      <div style="flex:1;"></div>
+      <!-- Controls -->
+      <div class="call-controls">
+        <div class="ctrl-btn muted"><div class="cb-icon">🎤</div><div class="cb-label">Mute</div></div>
+        <div class="ctrl-btn end" onclick="show('profile')"><div class="cb-icon" style="font-size:22px;">📵</div><div class="cb-label" style="color:white;">End</div></div>
+        <div class="ctrl-btn speaker"><div class="cb-icon">🔊</div><div class="cb-label">Speaker</div></div>
+      </div>
+      <div style="height:32px;"></div>
+    </div>
+  </div>
+
+  <!-- ═══ CHAT ═══ -->
+  <div class="screen" id="chat">
+    <div class="bg" style="overflow:hidden;">
+      <div class="chat-header">
+        <div style="font-size:20px;cursor:pointer;" onclick="show('home')">←</div>
+        <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#3a1530,#1a0a20);display:flex;align-items:center;justify-content:center;font-size:20px;position:relative;">
+          👩
+          <div style="position:absolute;bottom:0;right:0;width:10px;height:10px;background:var(--online);border-radius:50%;border:2px solid var(--surface);"></div>
+        </div>
+        <div>
+          <div class="label">Priya Sharma</div>
+          <div class="caption" style="color:var(--online);">Online</div>
+        </div>
+        <div class="spacer"></div>
+        <div style="font-size:18px;cursor:pointer;" onclick="show('call')">📞</div>
+        <div style="width:10px;"></div>
+        <div style="font-size:18px;cursor:pointer;" onclick="show('call')">📹</div>
+      </div>
+      <div class="chat-messages">
+        <div class="recv-wrap">
+          <div class="msg recv">Hey! How are you doing? 😊</div>
+          <div class="msg-time">2:30 PM</div>
+        </div>
+        <div class="sent-wrap">
+          <div class="msg sent">I'm great! Thanks. Want to have a call?</div>
+          <div class="msg-time">2:31 PM</div>
+        </div>
+        <div class="recv-wrap">
+          <div class="msg recv">Sure! I'm online right now 💕</div>
+          <div class="msg-time">2:31 PM</div>
+        </div>
+        <div class="sent-wrap">
+          <div class="msg sent">Amazing! Calling you now 📞</div>
+          <div class="msg-time">2:32 PM</div>
+        </div>
+        <div class="recv-wrap">
+          <div class="msg recv">🌹 Gift received! Thank you so much! 😍</div>
+          <div class="msg-time">2:35 PM</div>
+        </div>
+        <div style="text-align:center;margin:8px 0;"><span class="caption">Today</span></div>
+      </div>
+      <div class="chat-input-bar">
+        <span style="font-size:20px;cursor:pointer;">😊</span>
+        <input class="chat-input" placeholder="Type a message..." value="">
+        <div style="font-size:18px;cursor:pointer;">📎</div>
+        <div class="send-btn">➤</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ WALLET ═══ -->
+  <div class="screen" id="wallet">
+    <div class="bg" style="overflow:hidden;">
+      <div class="scroll">
+        <div class="wallet-header">
+          <div class="heading">My Wallet</div>
+        </div>
+        <!-- Balance -->
+        <div class="balance-card">
+          <div class="balance-label">Available Balance</div>
+          <div class="balance-amt">₹200</div>
+          <div class="balance-label" style="margin-bottom:16px;">~100 minutes of calls</div>
+          <button class="recharge-btn">+ Recharge</button>
+        </div>
+        <!-- Quick amounts -->
+        <div class="px">
+          <div class="heading-sm" style="margin-bottom:12px;">Quick Recharge</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
+            <div class="card" style="padding:12px;text-align:center;cursor:pointer;">
+              <div style="color:var(--primary);font-size:15px;font-weight:700;">₹49</div>
+              <div class="caption">Starter</div>
+            </div>
+            <div class="card" style="padding:12px;text-align:center;cursor:pointer;border-color:var(--primary);">
+              <div style="color:var(--primary);font-size:15px;font-weight:700;">₹99</div>
+              <div class="caption">Popular ⭐</div>
+            </div>
+            <div class="card" style="padding:12px;text-align:center;cursor:pointer;">
+              <div style="color:var(--primary);font-size:15px;font-weight:700;">₹499</div>
+              <div class="caption">Premium</div>
+            </div>
+          </div>
+          <!-- Transactions -->
+          <div class="heading-sm" style="margin-bottom:12px;">Recent Transactions</div>
+          <div class="txn-list">
+            <div class="txn-item">
+              <div class="txn-icon credit">💚</div>
+              <div style="flex:1;">
+                <div class="label" style="font-size:13px;">Wallet Recharge</div>
+                <div class="caption">Today, 2:15 PM</div>
+              </div>
+              <div class="txn-amt credit">+₹99</div>
+            </div>
+            <div class="txn-item">
+              <div class="txn-icon debit">📞</div>
+              <div style="flex:1;">
+                <div class="label" style="font-size:13px;">Call - Priya Sharma</div>
+                <div class="caption">Today, 2:30 PM · 5 min</div>
+              </div>
+              <div class="txn-amt debit">-₹10</div>
+            </div>
+            <div class="txn-item">
+              <div class="txn-icon debit">🌹</div>
+              <div style="flex:1;">
+                <div class="label" style="font-size:13px;">Gift - Rose</div>
+                <div class="caption">Yesterday, 6:00 PM</div>
+              </div>
+              <div class="txn-amt debit">-₹5</div>
+            </div>
+            <div class="txn-item">
+              <div class="txn-icon credit">💚</div>
+              <div style="flex:1;">
+                <div class="label" style="font-size:13px;">Wallet Recharge</div>
+                <div class="caption">Yesterday, 3:00 PM</div>
+              </div>
+              <div class="txn-amt credit">+₹199</div>
+            </div>
+          </div>
+          <div style="height:20px;"></div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="show('home')"><div class="icon">🔭</div><div class="nav-label">Discover</div></div>
+        <div class="nav-item" onclick="show('chat')"><div class="icon">💬</div><div class="nav-label">Chats</div></div>
+        <div class="nav-item active"><div class="icon">💳</div><div class="nav-label">Wallet</div></div>
+        <div class="nav-item" onclick="show('myprofile')"><div class="icon">👤</div><div class="nav-label">Profile</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MY PROFILE ═══ -->
+  <div class="screen" id="myprofile">
+    <div class="bg" style="overflow:hidden;">
+      <div class="scroll">
+        <div style="height:44px;"></div>
+        <div style="display:flex;flex-direction:column;align-items:center;padding:20px;">
+          <div class="prof-avatar">
+            👤
+            <div class="prof-edit">✏️</div>
+          </div>
+          <div class="gap12"></div>
+          <div class="heading-sm" style="font-size:18px;">Rahul Kumar</div>
+          <div class="body">+91 98765 43210</div>
+          <div class="gap8"></div>
+          <div style="background:rgba(255,77,121,.1);border:1px solid rgba(255,77,121,.3);border-radius:20px;padding:6px 16px;">
+            <span style="color:var(--primary);font-size:12px;font-weight:700;">💳 Balance: ₹200</span>
+          </div>
+        </div>
+        <div style="padding:0 20px 20px;">
+          <div class="menu-item"><div class="mi-icon">📞</div><div class="mi-label">Call History</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item"><div class="mi-icon">❤️</div><div class="mi-label">Following</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item"><div class="mi-icon">🎙️</div><div class="mi-label" style="color:var(--primary);">Become a Host</div><div class="mi-arrow" style="color:var(--primary);">›</div></div>
+          <div class="menu-item"><div class="mi-icon">🎧</div><div class="mi-label">Support</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item"><div class="mi-icon">⚙️</div><div class="mi-label">Settings</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item" onclick="show('login')"><div class="mi-icon">🚪</div><div class="mi-label" style="color:#E74C3C;">Logout</div><div class="mi-arrow" style="color:#E74C3C;">›</div></div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="show('home')"><div class="icon">🔭</div><div class="nav-label">Discover</div></div>
+        <div class="nav-item" onclick="show('chat')"><div class="icon">💬</div><div class="nav-label">Chats</div></div>
+        <div class="nav-item" onclick="show('wallet')"><div class="icon">💳</div><div class="nav-label">Wallet</div></div>
+        <div class="nav-item active"><div class="icon">👤</div><div class="nav-label">Profile</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ INCOMING CALL ═══ -->
+  <div class="screen" id="incoming">
+    <div class="bg" style="position:relative;">
+      <!-- Blurred home behind -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;filter:blur(2px);opacity:.4;">
+        <div class="heading">Find your host</div>
+        <div class="host-grid" style="padding:0 20px;width:100%;">
+          <div class="host-card"><div style="width:100%;height:100%;background:linear-gradient(135deg,#3a1530,#1a0a20);display:flex;align-items:center;justify-content:center;font-size:40px;">👩</div></div>
+          <div class="host-card"><div style="width:100%;height:100%;background:linear-gradient(135deg,#0a2a3a,#0a1520);display:flex;align-items:center;justify-content:center;font-size:40px;">👩‍🦱</div></div>
+        </div>
+      </div>
+      <!-- Dialog -->
+      <div class="dialog-overlay">
+        <div class="dialog">
+          <div class="ring-avatar">👩</div>
+          <div class="inc-label">Incoming Call</div>
+          <div class="gap8"></div>
+          <div class="heading" style="font-size:20px;">Priya Sharma</div>
+          <div class="gap4"></div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
+            <span style="font-size:12px;">📞</span>
+            <span class="body" style="font-size:12px;">Audio Call</span>
+          </div>
+          <div class="dialog-btns">
+            <div style="text-align:center;">
+              <div class="d-btn decline" onclick="show('home')">📵</div>
+              <div class="caption" style="margin-top:8px;">Decline</div>
+            </div>
+            <div style="text-align:center;">
+              <div class="d-btn accept" onclick="show('call')">📞</div>
+              <div class="caption" style="margin-top:8px;">Accept</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /phone -->
+
+<script>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const labels = {splash:'💫 Splash',login:'📱 Login',otp:'🔑 OTP',home:'🏠 Home',
+    profile:'👤 Host Profile',call:'📞 Call',chat:'💬 Chat',wallet:'💳 Wallet',
+    myprofile:'🙍 My Profile',incoming:'🔔 Incoming Call'};
+  document.querySelectorAll('.tab').forEach(t => {
+    if(t.textContent.trim() === labels[id]) t.classList.add('active');
+  });
+}
+</script>
+</body>
+</html>
