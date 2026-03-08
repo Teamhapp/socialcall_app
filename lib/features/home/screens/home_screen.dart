@@ -1,10 +1,6 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_endpoints.dart';
-import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -25,86 +21,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _navIndex = 0;
   final _searchController = TextEditingController();
   final _categories = ['All', 'Online', 'Hindi', 'English', 'Tamil', 'Telugu'];
-  MessageCallback? _incomingCallCb;
 
-  @override
-  void initState() {
-    super.initState();
-    _listenForIncomingCalls();
-  }
-
-  void _listenForIncomingCalls() {
-    _incomingCallCb = (data) {
-      if (!mounted) return;
-      final callId = data['callId'] as String? ?? '';
-      final callType = data['callType'] as String? ?? 'audio';
-      final caller = data['caller'] as Map<String, dynamic>? ?? {};
-      final callerName = caller['name'] as String? ?? 'Someone';
-      final callerAvatar = caller['avatar'] as String?;
-
-      _showIncomingCallDialog(
-        callId: callId,
-        isVideo: callType == 'video',
-        callerName: callerName,
-        callerAvatar: callerAvatar,
-      );
-    };
-    SocketService.on('incoming_call', _incomingCallCb!);
-  }
-
-  void _showIncomingCallDialog({
-    required String callId,
-    required bool isVideo,
-    required String callerName,
-    String? callerAvatar,
-  }) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _IncomingCallDialog(
-        callId: callId,
-        isVideo: isVideo,
-        callerName: callerName,
-        callerAvatar: callerAvatar,
-        onAccept: () async {
-          Navigator.pop(context);
-          try {
-            final resp = await ApiClient.dio
-                .post(ApiEndpoints.callAccept(callId));
-            final data = ApiClient.parseData(resp) as Map<String, dynamic>;
-            final host = HostModel.fromJson(
-              data['host'] as Map<String, dynamic>,
-            );
-            if (mounted) {
-              context.go('/call', extra: {
-                'host': host,
-                'isVideo': isVideo,
-                'callId': callId,
-                'isCaller': false,
-              });
-            }
-          } on DioException catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(ApiClient.errorMessage(e))),
-              );
-            }
-          }
-        },
-        onDecline: () {
-          Navigator.pop(context);
-          SocketService.emit('call_declined', {'callId': callId});
-        },
-      ),
-    );
-  }
+  // Incoming-call handling is now done globally in _AppShell (main.dart) via
+  // IncomingCallOverlay, so no per-screen listener is needed here.
 
   @override
   void dispose() {
     _searchController.dispose();
-    if (_incomingCallCb != null) {
-      SocketService.off('incoming_call', _incomingCallCb);
-    }
     super.dispose();
   }
 
@@ -486,7 +409,7 @@ class _ProfileTab extends ConsumerWidget {
   }
 }
 
-// ── Profile menu helpers ──────────────────────────────────────────────────────
+// ── Profile Tab menu helpers ──────────────────────────────────────────────────
 
 class _MenuItem {
   final IconData icon;
@@ -533,169 +456,5 @@ List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) => [
   ),
 ];
 
-// ── Incoming Call Dialog ──────────────────────────────────────────────────────
-
-class _IncomingCallDialog extends StatelessWidget {
-  final String callId;
-  final bool isVideo;
-  final String callerName;
-  final String? callerAvatar;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  const _IncomingCallDialog({
-    required this.callId,
-    required this.isVideo,
-    required this.callerName,
-    this.callerAvatar,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 40,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Pulsing ring around avatar
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: AppColors.primary.withOpacity(0.4), width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.25),
-                    blurRadius: 20,
-                    spreadRadius: 4,
-                  ),
-                ],
-              ),
-              child: CircleAvatar(
-                radius: 50,
-                backgroundImage: callerAvatar != null
-                    ? NetworkImage(callerAvatar!)
-                    : null,
-                backgroundColor: AppColors.card,
-                child: callerAvatar == null
-                    ? const Icon(Icons.person_rounded,
-                        size: 44, color: AppColors.textHint)
-                    : null,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            Text('Incoming Call', style: AppTextStyles.caption.copyWith(
-              color: AppColors.primary,
-              letterSpacing: 1.2,
-            )),
-            const SizedBox(height: 6),
-            Text(callerName, style: AppTextStyles.headingLarge),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-                  size: 14,
-                  color: AppColors.textSecondary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isVideo ? 'Video Call' : 'Audio Call',
-                  style: AppTextStyles.bodySmall,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 32),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Decline
-                Column(
-                  children: [
-                    GestureDetector(
-                      onTap: onDecline,
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: AppColors.callRed,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.callRed.withOpacity(0.5),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.call_end_rounded,
-                            color: Colors.white, size: 28),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Decline', style: AppTextStyles.caption),
-                  ],
-                ),
-
-                // Accept
-                Column(
-                  children: [
-                    GestureDetector(
-                      onTap: onAccept,
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: AppColors.callGreen,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.callGreen.withOpacity(0.5),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          isVideo
-                              ? Icons.videocam_rounded
-                              : Icons.call_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('Accept', style: AppTextStyles.caption),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Incoming call is now handled globally by IncomingCallOverlay in main.dart.
+// No per-screen dialog or socket listener needed here.
