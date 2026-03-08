@@ -460,32 +460,21 @@ class _ProfileTab extends ConsumerWidget {
             Text(user?.name ?? 'User', style: AppTextStyles.headingMedium),
             Text(user?.phone ?? '', style: AppTextStyles.bodyMedium),
             const SizedBox(height: 32),
-            ...[
-              (Icons.history_rounded, 'Call History', false),
-              (Icons.favorite_rounded, 'Following', false),
-              (Icons.support_agent_rounded, 'Support', false),
-              (Icons.settings_rounded, 'Settings', false),
-              (Icons.logout_rounded, 'Logout', true),
-            ].map((item) => Column(
+            ..._profileMenuItems(context, ref).map((item) => Column(
               children: [
                 ListTile(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   tileColor: AppColors.card,
-                  leading: Icon(item.$1,
-                      color: item.$3 ? Colors.redAccent : AppColors.primary),
-                  title: Text(item.$2,
+                  leading: Icon(item.icon,
+                      color: item.isDestructive ? Colors.redAccent : AppColors.primary),
+                  title: Text(item.label,
                       style: AppTextStyles.bodyLarge.copyWith(
-                          color: item.$3 ? Colors.redAccent : null)),
+                          color: item.isDestructive ? Colors.redAccent : null)),
                   trailing: const Icon(Icons.chevron_right_rounded,
                       color: AppColors.textHint),
-                  onTap: item.$3
-                      ? () async {
-                          await ref.read(authProvider.notifier).logout();
-                          if (context.mounted) context.go('/login');
-                        }
-                      : null,
+                  onTap: item.onTap,
                 ),
                 const SizedBox(height: 8),
               ],
@@ -496,6 +485,53 @@ class _ProfileTab extends ConsumerWidget {
     );
   }
 }
+
+// ── Profile menu helpers ──────────────────────────────────────────────────────
+
+class _MenuItem {
+  final IconData icon;
+  final String label;
+  final bool isDestructive;
+  final VoidCallback? onTap;
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    this.isDestructive = false,
+    this.onTap,
+  });
+}
+
+List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) => [
+  _MenuItem(
+    icon: Icons.history_rounded,
+    label: 'Call History',
+    onTap: () {}, // TODO: /call-history
+  ),
+  _MenuItem(
+    icon: Icons.favorite_rounded,
+    label: 'Following',
+    onTap: () {}, // TODO: /following
+  ),
+  _MenuItem(
+    icon: Icons.support_agent_rounded,
+    label: 'Support',
+    onTap: () => context.go('/help'),
+  ),
+  _MenuItem(
+    icon: Icons.settings_rounded,
+    label: 'Settings',
+    onTap: () => context.go('/settings'),
+  ),
+  _MenuItem(
+    icon: Icons.logout_rounded,
+    label: 'Logout',
+    isDestructive: true,
+    onTap: () async {
+      await ref.read(authProvider.notifier).logout();
+      if (context.mounted) context.go('/login');
+    },
+  ),
+];
 
 // ── Incoming Call Dialog ──────────────────────────────────────────────────────
 

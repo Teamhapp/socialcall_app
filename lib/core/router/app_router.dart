@@ -10,6 +10,8 @@ import '../../features/host_profile/screens/host_profile_screen.dart';
 import '../../features/call/screens/call_screen.dart';
 import '../../features/chat/screens/chat_screen.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
+import '../../features/help/screens/help_screen.dart';
 import '../../models/host_model.dart';
 
 const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp'];
@@ -55,6 +57,8 @@ class AppRouter {
         builder: (_, state) => ChatScreen(host: state.extra as HostModel),
       ),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
+      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Route not found: ${state.error}')),

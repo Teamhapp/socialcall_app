@@ -247,6 +247,54 @@
   .dots { display: flex; gap: 6px; margin-top: 24px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
   .dot.active { background: var(--primary); width: 24px; border-radius: 4px; }
+
+  /* ─── SETTINGS ─── */
+  .stt-label { color: var(--primary); font-size: 10px; font-weight: 700;
+    letter-spacing: 1.2px; text-transform: uppercase; margin: 16px 0 6px; }
+  .stt-group { background: var(--card); border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--border); margin-bottom: 4px; }
+  .stt { padding: 13px 16px; display: flex; align-items: center; gap: 12px; }
+  .stt .st-icon { font-size: 17px; width: 22px; text-align: center; }
+  .stt .st-label { font-size: 14px; color: var(--text); }
+  .stt .st-sub { font-size: 11px; color: var(--hint); margin-top: 2px; }
+  .stt .st-value { font-size: 12px; color: var(--hint); white-space: nowrap; }
+  .toggle { width: 44px; height: 24px; border-radius: 12px; position: relative;
+    cursor: pointer; flex-shrink: 0; }
+  .toggle.on { background: var(--primary); }
+  .toggle.off { background: var(--border); }
+  .toggle-thumb { position: absolute; top: 2px; width: 20px; height: 20px;
+    border-radius: 50%; background: white; transition: left .2s; }
+  .toggle.on .toggle-thumb { left: 22px; }
+  .toggle.off .toggle-thumb { left: 2px; }
+
+  /* ─── HELP ─── */
+  .help-bar { display: flex; background: var(--surface);
+    border-bottom: 1px solid var(--border); }
+  .htab { flex: 1; padding: 11px 4px; text-align: center; font-size: 13px;
+    font-weight: 600; color: var(--hint); cursor: pointer;
+    border-bottom: 2px solid transparent; }
+  .htab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .faq-item { background: var(--card); border-radius: 12px; padding: 13px 14px;
+    margin-bottom: 8px; cursor: pointer; border: 1px solid var(--border); }
+  .faq-q { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .faq-q-text { font-size: 12.5px; color: var(--text); font-weight: 600; flex: 1; line-height: 1.4; }
+  .faq-arrow { color: var(--hint); font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+  .faq-a { font-size: 12px; color: var(--text2); line-height: 1.6; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border); display: none; }
+  .faq-item.open .faq-a { display: block; }
+  .contact-card { background: var(--card); border-radius: 14px; padding: 14px 16px;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 14px; cursor: pointer;
+    border: 1px solid var(--border); }
+  .cc-icon { width: 42px; height: 42px; border-radius: 12px; display: flex;
+    align-items: center; justify-content: center; font-size: 20px; }
+  .report-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .rep-chip { padding: 7px 13px; border-radius: 20px; border: 1.5px solid var(--border);
+    color: var(--hint); font-size: 11px; font-weight: 600; cursor: pointer; }
+  .rep-chip.sel { background: rgba(255,77,121,.12); border-color: var(--primary); color: var(--primary); }
+  .rep-textarea { background: var(--card); border: 1.5px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 13px;
+    width: 100%; resize: none; outline: none; height: 90px; font-family: inherit; }
+  .rep-textarea::placeholder { color: var(--hint); }
 </style>
 </head>
 <body>
@@ -265,6 +313,8 @@
   <div class="tab" onclick="show('wallet')">💳 Wallet</div>
   <div class="tab" onclick="show('myprofile')">🙍 My Profile</div>
   <div class="tab" onclick="show('incoming')">🔔 Incoming Call</div>
+  <div class="tab" onclick="show('settings')">⚙️ Settings</div>
+  <div class="tab" onclick="show('help')">🆘 Help</div>
 </div>
 
 <div class="phone">
@@ -705,8 +755,8 @@
           <div class="menu-item"><div class="mi-icon">📞</div><div class="mi-label">Call History</div><div class="mi-arrow">›</div></div>
           <div class="menu-item"><div class="mi-icon">❤️</div><div class="mi-label">Following</div><div class="mi-arrow">›</div></div>
           <div class="menu-item"><div class="mi-icon">🎙️</div><div class="mi-label" style="color:var(--primary);">Become a Host</div><div class="mi-arrow" style="color:var(--primary);">›</div></div>
-          <div class="menu-item"><div class="mi-icon">🎧</div><div class="mi-label">Support</div><div class="mi-arrow">›</div></div>
-          <div class="menu-item"><div class="mi-icon">⚙️</div><div class="mi-label">Settings</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item" onclick="show('help')"><div class="mi-icon">🎧</div><div class="mi-label">Support</div><div class="mi-arrow">›</div></div>
+          <div class="menu-item" onclick="show('settings')"><div class="mi-icon">⚙️</div><div class="mi-label">Settings</div><div class="mi-arrow">›</div></div>
           <div class="menu-item" onclick="show('login')"><div class="mi-icon">🚪</div><div class="mi-label" style="color:#E74C3C;">Logout</div><div class="mi-arrow" style="color:#E74C3C;">›</div></div>
         </div>
       </div>
@@ -757,6 +807,259 @@
     </div>
   </div>
 
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="screen" id="settings">
+    <div class="bg" style="overflow:hidden;">
+      <!-- AppBar -->
+      <div style="background:var(--surface);padding:44px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+        <div style="font-size:22px;cursor:pointer;color:var(--text);" onclick="show('myprofile')">←</div>
+        <div style="color:var(--text);font-size:17px;font-weight:700;flex:1;">Settings</div>
+      </div>
+      <!-- Scrollable content -->
+      <div class="scroll" style="padding:0 16px 16px;">
+        <!-- Account -->
+        <div class="stt-label">Account</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">✏️</span>
+            <div style="flex:1;"><div class="st-label">Edit Name</div><div class="st-sub">Rahul Kumar</div></div>
+            <span class="st-value">›</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">📱</span>
+            <div style="flex:1;"><div class="st-label">Phone Number</div><div class="st-sub">+91 98765 43210</div></div>
+            <span style="background:rgba(39,174,96,.12);border:1px solid rgba(39,174,96,.3);border-radius:6px;padding:2px 7px;color:#27AE60;font-size:9px;font-weight:700;">Verified ✓</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🌐</span>
+            <div style="flex:1;"><div class="st-label">Language</div></div>
+            <span class="st-value">Hindi ›</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">📶</span>
+            <div style="flex:1;"><div class="st-label">Call Quality</div></div>
+            <span class="st-value">Auto ›</span>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="stt-label">Notifications</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">🔔</span>
+            <div style="flex:1;"><div class="st-label">Call Notifications</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">💬</span>
+            <div style="flex:1;"><div class="st-label">Message Notifications</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🎁</span>
+            <div style="flex:1;"><div class="st-label">Gift Notifications</div></div>
+            <div class="toggle off"><div class="toggle-thumb"></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">📣</span>
+            <div style="flex:1;"><div class="st-label">Promotions</div></div>
+            <div class="toggle off"><div class="toggle-thumb"></div></div>
+          </div>
+        </div>
+
+        <!-- Call Preferences -->
+        <div class="stt-label">Call Preferences</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">⏱️</span>
+            <div style="flex:1;"><div class="st-label">Show Call Timer</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">⚠️</span>
+            <div style="flex:1;"><div class="st-label">Low Balance Alert</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+        </div>
+
+        <!-- Privacy -->
+        <div class="stt-label">Privacy</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">👁️</span>
+            <div style="flex:1;"><div class="st-label">Show Online Status</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🎁</span>
+            <div style="flex:1;"><div class="st-label">Allow Gifts from Others</div></div>
+            <div class="toggle on"><div class="toggle-thumb"></div></div>
+          </div>
+        </div>
+
+        <!-- Security -->
+        <div class="stt-label">Security</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">🚫</span>
+            <div style="flex:1;"><div class="st-label">Blocked Users</div><div class="st-sub">0 users blocked</div></div>
+            <span class="st-value">›</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🔐</span>
+            <div style="flex:1;"><div class="st-label">Logout All Devices</div></div>
+            <span class="st-value">›</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🗑️</span>
+            <div style="flex:1;"><div class="st-label" style="color:#E74C3C;">Delete Account</div></div>
+            <span class="st-value">›</span>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="stt-label">About</div>
+        <div class="stt-group">
+          <div class="stt">
+            <span class="st-icon">ℹ️</span>
+            <div style="flex:1;"><div class="st-label">App Version</div></div>
+            <span class="st-value">1.0.0</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">📄</span>
+            <div style="flex:1;"><div class="st-label">Terms of Service</div></div>
+            <span class="st-value">›</span>
+          </div>
+          <div class="divider"></div>
+          <div class="stt">
+            <span class="st-icon">🔒</span>
+            <div style="flex:1;"><div class="st-label">Privacy Policy</div></div>
+            <span class="st-value">›</span>
+          </div>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ HELP & SUPPORT ═══ -->
+  <div class="screen" id="help">
+    <div class="bg" style="overflow:hidden;">
+      <!-- AppBar + tabs -->
+      <div style="background:var(--surface);border-bottom:1px solid var(--border);">
+        <div style="padding:44px 16px 12px;display:flex;align-items:center;gap:10px;">
+          <div style="font-size:22px;cursor:pointer;color:var(--text);" onclick="show('myprofile')">←</div>
+          <div style="color:var(--text);font-size:17px;font-weight:700;flex:1;">Help &amp; Support</div>
+        </div>
+        <div class="help-bar">
+          <div class="htab active" id="htab-faq" onclick="showHelpTab('faq')">FAQ</div>
+          <div class="htab" id="htab-contact" onclick="showHelpTab('contact')">Contact Us</div>
+          <div class="htab" id="htab-report" onclick="showHelpTab('report')">Report Issue</div>
+        </div>
+      </div>
+
+      <!-- ─ FAQ content ─ -->
+      <div class="scroll" id="hcontent-faq" style="flex:1;padding:12px 14px;">
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">How does the wallet work?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Add money using UPI, cards, or net banking. Your balance is deducted per call minute and gifts sent.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">What are the call charges?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Each host sets their own rate. Audio calls start from ₹2/min and video calls from ₹3/min.</div>
+        </div>
+        <div class="faq-item open" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">How do I become a host?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Tap "Become a Host" on the login or profile page, complete your profile, and submit for review. Approval takes 24–48 hours.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">Can I get a refund?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Unused wallet balance is refundable within 7 days of recharge. Completed call charges are non-refundable.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">Why does my call disconnect?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Calls disconnect when your balance runs low or due to poor internet. Keep your wallet topped up for uninterrupted calls.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+          <div class="faq-q"><span class="faq-q-text">How do gifts work?</span><span class="faq-arrow">▾</span></div>
+          <div class="faq-a">Send virtual gifts during calls. The cost is deducted from your wallet and hosts earn a percentage of each gift value.</div>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+
+      <!-- ─ Contact content ─ -->
+      <div class="scroll" id="hcontent-contact" style="flex:1;padding:12px 14px;display:none;">
+        <div style="background:rgba(255,77,121,.08);border:1px solid rgba(255,77,121,.2);border-radius:12px;padding:12px 14px;margin-bottom:14px;text-align:center;">
+          <div class="label" style="font-size:12px;">⏰ Support Hours</div>
+          <div class="caption" style="margin-top:4px;">Mon–Fri: 9am–9pm · Sat: 10am–6pm</div>
+        </div>
+        <div class="contact-card">
+          <div class="cc-icon" style="background:rgba(37,211,102,.15);">💬</div>
+          <div style="flex:1;">
+            <div class="label" style="font-size:13px;">WhatsApp Support</div>
+            <div class="caption">+91 90000 00000 · Fastest response</div>
+          </div>
+          <span class="st-value">›</span>
+        </div>
+        <div class="contact-card">
+          <div class="cc-icon" style="background:rgba(255,77,121,.15);">📧</div>
+          <div style="flex:1;">
+            <div class="label" style="font-size:13px;">Email Support</div>
+            <div class="caption">support@socialcall.app</div>
+          </div>
+          <span class="st-value">›</span>
+        </div>
+        <div class="contact-card">
+          <div class="cc-icon" style="background:rgba(131,58,180,.15);">📷</div>
+          <div style="flex:1;">
+            <div class="label" style="font-size:13px;">Instagram</div>
+            <div class="caption">@socialcallapp</div>
+          </div>
+          <span class="st-value">›</span>
+        </div>
+        <div class="contact-card">
+          <div class="cc-icon" style="background:rgba(29,161,242,.15);">🐦</div>
+          <div style="flex:1;">
+            <div class="label" style="font-size:13px;">Twitter / X</div>
+            <div class="caption">@socialcallapp</div>
+          </div>
+          <span class="st-value">›</span>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+
+      <!-- ─ Report content ─ -->
+      <div class="scroll" id="hcontent-report" style="flex:1;padding:12px 14px;display:none;">
+        <div class="label" style="font-size:12px;margin-bottom:8px;">What are you reporting?</div>
+        <div class="report-chips">
+          <div class="rep-chip sel">Technical Issue</div>
+          <div class="rep-chip">Payment Problem</div>
+          <div class="rep-chip">Host Misconduct</div>
+          <div class="rep-chip">Account Issue</div>
+          <div class="rep-chip">App Crash</div>
+          <div class="rep-chip">Other</div>
+        </div>
+        <div class="label" style="font-size:12px;margin-bottom:8px;">Describe your issue</div>
+        <textarea class="rep-textarea" placeholder="Please describe your issue in detail. The more detail you provide, the faster we can help you..."></textarea>
+        <div class="gap16"></div>
+        <button class="btn-grad" style="font-size:14px;">Submit Report</button>
+        <div style="height:16px;"></div>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /phone -->
 
 <script>
@@ -764,12 +1067,26 @@ function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  const labels = {splash:'💫 Splash',login:'📱 Login',otp:'🔑 OTP',home:'🏠 Home',
-    profile:'👤 Host Profile',call:'📞 Call',chat:'💬 Chat',wallet:'💳 Wallet',
-    myprofile:'🙍 My Profile',incoming:'🔔 Incoming Call'};
+  const labels = {
+    splash:'💫 Splash', login:'📱 Login', otp:'🔑 OTP', home:'🏠 Home',
+    profile:'👤 Host Profile', call:'📞 Call', chat:'💬 Chat', wallet:'💳 Wallet',
+    myprofile:'🙍 My Profile', incoming:'🔔 Incoming Call',
+    settings:'⚙️ Settings', help:'🆘 Help'
+  };
   document.querySelectorAll('.tab').forEach(t => {
     if(t.textContent.trim() === labels[id]) t.classList.add('active');
   });
+}
+
+function showHelpTab(tab) {
+  ['faq','contact','report'].forEach(t => {
+    document.getElementById('htab-'+t).classList.toggle('active', t === tab);
+    document.getElementById('hcontent-'+t).style.display = t === tab ? 'flex' : 'none';
+  });
+}
+
+function toggleFaq(el) {
+  el.classList.toggle('open');
 }
 </script>
 </body>
