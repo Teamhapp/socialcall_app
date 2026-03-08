@@ -32,6 +32,7 @@ class WalletService {
   Future<void> initiateRecharge({
     required BuildContext context,
     required int amount,
+    required String razorpayKeyId,
     required Function(int amount) onSuccess,
     required Function(String error) onFailure,
   }) async {
@@ -53,6 +54,7 @@ class WalletService {
       userEmail: 'user@example.com',
       userName: 'User',
       orderId: orderId,
+      razorpayKeyId: razorpayKeyId,
       onResult: (result) async {
         if (result.success) {
           // Step 3 — Verify payment on backend
