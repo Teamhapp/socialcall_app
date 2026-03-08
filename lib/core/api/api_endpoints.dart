@@ -1,0 +1,45 @@
+class ApiEndpoints {
+  // ── Switch between environments ────────────────────────────────────────────
+  // Local emulator    → 'http://10.0.2.2:5000'
+  // Local real device → 'http://192.168.1.12:5000'   (your PC's WiFi IP)
+  // Render.com        → 'https://socialcall-backend.onrender.com'
+  // Google Cloud Run  → 'https://socialcall-backend-xxxxxxxx-el.a.run.app'
+  //                      ↑ paste the URL printed at the end of deploy.sh
+  static const String baseUrl = 'https://socialcall-backend.onrender.com';
+
+  // Auth
+  static const String sendOtp = '/api/auth/send-otp';
+  static const String verifyOtp = '/api/auth/verify-otp';
+  static const String refresh = '/api/auth/refresh';
+  static const String logout = '/api/auth/logout';
+  static const String me = '/api/auth/me';
+
+  // User
+  static const String profile = '/api/users/profile';
+  static const String fcmToken = '/api/users/fcm-token';
+
+  // Hosts
+  static const String hosts = '/api/hosts';
+  static String hostById(String id) => '/api/hosts/$id';
+  static String hostFollow(String id) => '/api/hosts/$id/follow';
+  static const String hostProfile = '/api/hosts/profile';
+  static const String hostStatus = '/api/hosts/status';
+
+  // Calls
+  static const String callInitiate = '/api/calls/initiate';
+  static String callAccept(String id) => '/api/calls/$id/accept';
+  static String callEnd(String id) => '/api/calls/$id/end';
+  static String callReview(String id) => '/api/calls/$id/review';
+  static const String callHistory = '/api/calls/history';
+
+  // Chat
+  static const String conversations = '/api/chat';
+  static String messages(String userId) => '/api/chat/$userId';
+
+  // Wallet
+  static const String walletOrder = '/api/wallet/order';
+  static const String walletVerify = '/api/wallet/verify';
+  static const String walletTransactions = '/api/wallet/transactions';
+  static const String gifts = '/api/wallet/gifts';
+  static const String sendGift = '/api/wallet/gift';
+}
