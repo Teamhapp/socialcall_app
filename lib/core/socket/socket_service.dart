@@ -47,14 +47,18 @@ class SocketService {
     // Re-attach all event listeners
     _listeners.forEach((event, callbacks) {
       for (final cb in callbacks) {
-        _socket!.on(event, (data) => cb(data as Map<String, dynamic>));
+        _socket!.on(event, (data) => cb(
+          data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+        ));
       }
     });
   }
 
   static void on(String event, MessageCallback callback) {
     _listeners.putIfAbsent(event, () => []).add(callback);
-    _socket?.on(event, (data) => callback(data as Map<String, dynamic>));
+    _socket?.on(event, (data) => callback(
+      data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    ));
   }
 
   static void off(String event, [MessageCallback? callback]) {
