@@ -25,6 +25,8 @@ jobs:
   build:
     name: Build Flutter APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create GitHub Releases
 
     steps:
 
