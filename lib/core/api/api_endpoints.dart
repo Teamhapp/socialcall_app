@@ -5,7 +5,7 @@ class ApiEndpoints {
   // Render.com        → 'https://socialcall-backend.onrender.com'
   // Google Cloud Run  → 'https://socialcall-backend-xxxxxxxx-el.a.run.app'
   //                      ↑ paste the URL printed at the end of deploy.sh
-  static const String baseUrl = 'https://socialcall-backend.onrender.com';
+  static const String baseUrl = 'https://socialcallbackend.replit.app';
 
   // Auth
   static const String sendOtp = '/api/auth/send-otp';
