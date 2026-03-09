@@ -11,6 +11,24 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../../models/host_model.dart';
 
+// Helper: build a minimal HostModel from caller info in IncomingCallState.
+// CallScreen requires a HostModel for the "other party" regardless of direction.
+HostModel _callerAsHost(IncomingCallState cs) => HostModel(
+      id: cs.callId ?? '',
+      userId: cs.callId ?? '',
+      name: cs.callerName,
+      avatar: cs.callerAvatar,
+      bio: '',
+      languages: const [],
+      audioRatePerMin: 0,
+      videoRatePerMin: 0,
+      rating: 0,
+      totalCalls: 0,
+      isOnline: true,
+      isVerified: false,
+      followersCount: 0,
+    );
+
 // ─────────────────────────────────────────────────────────────────────────────
 // IncomingCallOverlay
 //
@@ -59,24 +77,21 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
     if (_isAccepting) return;
     setState(() => _isAccepting = true);
     try {
-      final resp =
-          await ApiClient.dio.post(ApiEndpoints.callAccept(cs.callId!));
-      final data = ApiClient.parseData(resp) as Map<String, dynamic>;
-      final host =
-          HostModel.fromJson(data['host'] as Map<String, dynamic>);
+      // Tell backend host accepted → triggers call_connected to caller
+      await ApiClient.dio.post(ApiEndpoints.callAccept(cs.callId!));
 
       ref.read(incomingCallProvider.notifier).dismiss();
 
-      // Navigate to the call screen using the GoRouter instance directly
-      // so navigation works from any screen without needing a BuildContext.
+      // Build caller representation from IncomingCallState — backend accept
+      // response only returns {callId, channelName}, not host/caller info.
       AppRouter.router.go('/call', extra: {
-        'host': host,
+        'host': _callerAsHost(cs),
         'isVideo': cs.isVideo,
         'callId': cs.callId,
         'isCaller': false,
       });
     } on DioException catch (e) {
-      // If accept fails (e.g. caller already hung up), just dismiss
+      // Accept failed (caller already hung up etc.) — just dismiss
       final msg = ApiClient.errorMessage(e);
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -91,7 +106,8 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
   // ── Decline ────────────────────────────────────────────────────────────────
 
   void _decline(IncomingCallState cs) {
-    SocketService.emit('call_declined', {'callId': cs.callId});
+    // Backend socket listens for 'call_rejected' (not 'call_declined')
+    SocketService.emit('call_rejected', {'callId': cs.callId});
     ref.read(incomingCallProvider.notifier).dismiss();
   }
 
