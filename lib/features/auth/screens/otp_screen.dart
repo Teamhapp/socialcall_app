@@ -49,7 +49,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   void _verifyOtp() async {
-    if (_otpController.text.length != 4) return;
+    if (_otpController.text.length != 6) return;
     setState(() => _isLoading = true);
     try {
       await ref.read(authProvider.notifier).verifyOtp(
@@ -136,7 +136,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 Center(
                   child: Pinput(
                     controller: _otpController,
-                    length: 4,
+                    length: 6,
                     defaultPinTheme: defaultPinTheme,
                     focusedPinTheme: defaultPinTheme.copyWith(
                       decoration: defaultPinTheme.decoration!.copyWith(
