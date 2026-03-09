@@ -50,7 +50,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
             user: UserModel.fromJson(userData),
             isAuthenticated: true,
           );
-          // Refresh from server in background
           _refreshProfile();
           return;
         }
@@ -69,20 +68,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {}
   }
 
+  // ── Shared: save tokens + user from any auth response ───────────────────────
+  Future<UserModel> _handleAuthResponse(Map<String, dynamic> data) async {
+    final accessToken  = data['accessToken']  as String;
+    final refreshToken = data['refreshToken'] as String;
+    final userJson     = data['user']         as Map<String, dynamic>;
+    await StorageService.saveTokens(accessToken, refreshToken);
+    await StorageService.saveUser(userJson);
+    final user = UserModel.fromJson(userJson);
+    state = AuthState(user: user, isAuthenticated: true);
+    return user;
+  }
+
   // ── Send OTP ─────────────────────────────────────────────────────────────────
   Future<void> sendOtp(String phone) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await ApiClient.dio.post(
-        ApiEndpoints.sendOtp,
-        data: {'phone': phone},
-      );
+      await ApiClient.dio.post(ApiEndpoints.sendOtp, data: {'phone': phone});
       state = state.copyWith(isLoading: false);
     } on Exception catch (e) {
-      final msg = e.toString().contains('DioException')
-          ? 'Network error'
-          : e.toString();
-      state = state.copyWith(isLoading: false, error: msg);
+      state = state.copyWith(isLoading: false, error: e.toString());
       rethrow;
     }
   }
@@ -95,20 +100,62 @@ class AuthNotifier extends StateNotifier<AuthState> {
         ApiEndpoints.verifyOtp,
         data: {'phone': phone, 'otp': otp},
       );
-      final data = ApiClient.parseData(resp) as Map<String, dynamic>;
-      final accessToken = data['accessToken'] as String;
-      final refreshToken = data['refreshToken'] as String;
-      final userJson = data['user'] as Map<String, dynamic>;
-
-      await StorageService.saveTokens(accessToken, refreshToken);
-      await StorageService.saveUser(userJson);
-
-      final user = UserModel.fromJson(userJson);
-      state = AuthState(user: user, isAuthenticated: true);
-      return user;
+      return await _handleAuthResponse(
+          ApiClient.parseData(resp) as Map<String, dynamic>);
     } on Exception catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
       rethrow;
+    }
+  }
+
+  // ── Register with phone + password ──────────────────────────────────────────
+  Future<UserModel> register(String phone, String password,
+      {String? name}) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final resp = await ApiClient.dio.post(
+        ApiEndpoints.register,
+        data: {
+          'phone': phone,
+          'password': password,
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        },
+      );
+      return await _handleAuthResponse(
+          ApiClient.parseData(resp) as Map<String, dynamic>);
+    } on Exception catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  // ── Login with phone + password ──────────────────────────────────────────────
+  Future<UserModel> loginWithPassword(String phone, String password) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final resp = await ApiClient.dio.post(
+        ApiEndpoints.loginPassword,
+        data: {'phone': phone, 'password': password},
+      );
+      return await _handleAuthResponse(
+          ApiClient.parseData(resp) as Map<String, dynamic>);
+    } on Exception catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
+
+  // ── Set / change password (authenticated user) ───────────────────────────────
+  Future<void> setPassword(String newPassword, {String? currentPassword}) async {
+    await ApiClient.dio.post(
+      ApiEndpoints.setPassword,
+      data: {
+        'newPassword': newPassword,
+        if (currentPassword != null) 'currentPassword': currentPassword,
+      },
+    );
+    if (state.user != null) {
+      state = state.copyWith(user: state.user!.copyWith(hasPassword: true));
     }
   }
 

@@ -5,6 +5,7 @@ import '../../features/auth/screens/splash_screen.dart';
 import '../../features/auth/screens/onboarding_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/otp_screen.dart';
+import '../../features/auth/screens/register_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/host_profile/screens/host_profile_screen.dart';
 import '../../features/call/screens/call_screen.dart';
@@ -14,7 +15,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/help/screens/help_screen.dart';
 import '../../models/host_model.dart';
 
-const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp'];
+const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp', '/register'];
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -35,6 +36,7 @@ class AppRouter {
         path: '/otp',
         builder: (_, state) => OtpScreen(phone: state.extra as String),
       ),
+      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
       GoRoute(
         path: '/host/:id',

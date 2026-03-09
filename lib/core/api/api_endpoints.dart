@@ -7,12 +7,17 @@ class ApiEndpoints {
   //                      ↑ paste the URL printed at the end of deploy.sh
   static const String baseUrl = 'https://socialcallbackend.replit.app';
 
-  // Auth
-  static const String sendOtp = '/api/auth/send-otp';
-  static const String verifyOtp = '/api/auth/verify-otp';
+  // Auth — OTP
+  static const String sendOtp    = '/api/auth/send-otp';
+  static const String verifyOtp  = '/api/auth/verify-otp';
+  // Auth — Password
+  static const String register      = '/api/auth/register';
+  static const String loginPassword = '/api/auth/login-password';
+  static const String setPassword   = '/api/auth/set-password';
+  // Auth — Shared
   static const String refresh = '/api/auth/refresh';
-  static const String logout = '/api/auth/logout';
-  static const String me = '/api/auth/me';
+  static const String logout  = '/api/auth/logout';
+  static const String me      = '/api/auth/me';
 
   // User
   static const String profile = '/api/users/profile';
