@@ -29,6 +29,8 @@ class ApiEndpoints {
   static String hostFollow(String id) => '/api/hosts/$id/follow';
   static const String hostProfile = '/api/hosts/profile';
   static const String hostStatus = '/api/hosts/status';
+  static const String hostDashboard = '/api/hosts/me';
+  static const String hostFollowing = '/api/hosts/following';
 
   // Calls
   static const String callInitiate = '/api/calls/initiate';
@@ -36,6 +38,7 @@ class ApiEndpoints {
   static String callEnd(String id) => '/api/calls/$id/end';
   static String callReview(String id) => '/api/calls/$id/review';
   static const String callHistory = '/api/calls/history';
+  static const String callHistoryHost = '/api/calls/history/host';
 
   // Chat
   static const String conversations = '/api/chat';

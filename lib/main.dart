@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/incoming_call_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/services/call_notification_service.dart';
 import 'core/socket/socket_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/incoming_call_overlay.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await CallNotificationService.init();
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

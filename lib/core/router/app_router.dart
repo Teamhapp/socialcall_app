@@ -13,6 +13,10 @@ import '../../features/chat/screens/chat_screen.dart';
 import '../../features/wallet/screens/wallet_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/help/screens/help_screen.dart';
+import '../../features/host_management/screens/become_host_screen.dart';
+import '../../features/host_management/screens/host_dashboard_screen.dart';
+import '../../features/call_history/screens/call_history_screen.dart';
+import '../../features/following/screens/following_screen.dart';
 import '../../models/host_model.dart';
 
 const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp', '/register'];
@@ -61,6 +65,10 @@ class AppRouter {
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
+      GoRoute(path: '/become-host', builder: (_, __) => const BecomeHostScreen()),
+      GoRoute(path: '/host-dashboard', builder: (_, __) => const HostDashboardScreen()),
+      GoRoute(path: '/call-history', builder: (_, __) => const CallHistoryScreen()),
+      GoRoute(path: '/following', builder: (_, __) => const FollowingScreen()),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Route not found: ${state.error}')),

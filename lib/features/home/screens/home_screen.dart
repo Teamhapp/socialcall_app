@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -279,12 +282,42 @@ class _DiscoveryTab extends StatelessWidget {
   }
 }
 
-class _ChatListTab extends StatelessWidget {
+class _ChatListTab extends StatefulWidget {
   const _ChatListTab();
 
   @override
+  State<_ChatListTab> createState() => _ChatListTabState();
+}
+
+class _ChatListTabState extends State<_ChatListTab> {
+  List<Map<String, dynamic>> _conversations = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _isLoading = true);
+    try {
+      final resp =
+          await ApiClient.dio.get(ApiEndpoints.conversations);
+      final raw = ApiClient.parseData(resp) as List? ?? [];
+      if (mounted) {
+        setState(() {
+          _conversations = raw.cast<Map<String, dynamic>>();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hosts = HostModel.demoHosts.take(3).toList();
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,48 +326,164 @@ class _ChatListTab extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Text('Messages', style: AppTextStyles.headingLarge),
           ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: hosts.length,
-              itemBuilder: (_, i) {
-                final host = hosts[i];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 6),
-                  leading: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundImage: NetworkImage(host.avatar ?? ''),
-                      ),
-                      if (host.isOnline)
-                        Positioned(
-                          bottom: 0, right: 0,
-                          child: Container(
-                            width: 12, height: 12,
-                            decoration: BoxDecoration(
-                              color: AppColors.online,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: AppColors.background, width: 2),
-                            ),
+          if (_isLoading)
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            )
+          else if (_conversations.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded,
+                        size: 52, color: AppColors.textHint),
+                    const SizedBox(height: 12),
+                    Text('No conversations yet',
+                        style: AppTextStyles.bodyMedium),
+                    const SizedBox(height: 4),
+                    Text('Call a host to unlock chat!',
+                        style: AppTextStyles.bodySmall),
+                  ],
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _load,
+                color: AppColors.primary,
+                child: ListView.builder(
+                  itemCount: _conversations.length,
+                  itemBuilder: (_, i) {
+                    final conv = _conversations[i];
+                    final otherUserId =
+                        conv['other_user_id'] as String? ?? '';
+                    final otherName =
+                        conv['other_name'] as String? ?? 'Unknown';
+                    final otherAvatar = conv['other_avatar'] as String?;
+                    final lastMsg =
+                        conv['last_message'] as String? ?? '';
+                    final isOnline =
+                        conv['is_online'] as bool? ?? false;
+                    final unread =
+                        int.tryParse('${conv['unread_count'] ?? 0}') ??
+                            0;
+                    final lastAt = conv['last_message_at'] != null
+                        ? DateTime.tryParse(
+                            conv['last_message_at'] as String)
+                        : null;
+
+                    // Build a minimal HostModel so ChatScreen gets what it
+                    // needs (id = other_user_id for socket communication)
+                    final fakeHost = HostModel(
+                      id: otherUserId,
+                      userId: otherUserId,
+                      name: otherName,
+                      avatar: otherAvatar,
+                      bio: '',
+                      languages: const [],
+                      audioRatePerMin: 0,
+                      videoRatePerMin: 0,
+                      rating: 0,
+                      totalCalls: 0,
+                      isOnline: isOnline,
+                      isVerified: false,
+                      followersCount: 0,
+                    );
+
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 6),
+                      leading: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundImage: otherAvatar != null
+                                ? NetworkImage(otherAvatar)
+                                : null,
+                            backgroundColor:
+                                AppColors.primary.withOpacity(0.1),
+                            child: otherAvatar == null
+                                ? const Icon(Icons.person_rounded,
+                                    color: AppColors.primary)
+                                : null,
                           ),
-                        ),
-                    ],
-                  ),
-                  title: Text(host.name, style: AppTextStyles.labelLarge),
-                  subtitle: Text('Tap to start chatting',
-                      style: AppTextStyles.bodySmall),
-                  trailing: Text('2h ago', style: AppTextStyles.caption),
-                  onTap: () =>
-                      context.go('/chat/${host.id}', extra: host),
-                );
-              },
+                          if (isOnline)
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: Container(
+                                width: 12, height: 12,
+                                decoration: BoxDecoration(
+                                  color: AppColors.online,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppColors.background,
+                                      width: 2),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(otherName,
+                                style: AppTextStyles.labelLarge),
+                          ),
+                          if (unread > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        lastMsg.isNotEmpty ? lastMsg : 'Tap to chat',
+                        style: AppTextStyles.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: lastAt != null
+                          ? Text(
+                              _formatTime(lastAt),
+                              style: AppTextStyles.caption,
+                            )
+                          : null,
+                      onTap: () => context.go(
+                          '/chat/$otherUserId',
+                          extra: fakeHost),
+                    );
+                  },
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
+  }
+
+  static String _formatTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inDays == 0) return DateFormat('hh:mm a').format(dt);
+    if (diff.inDays < 7) return DateFormat('EEE').format(dt);
+    return DateFormat('dd/MM').format(dt);
   }
 }
 
@@ -395,6 +544,11 @@ class _ProfileTab extends ConsumerWidget {
                   title: Text(item.label,
                       style: AppTextStyles.bodyLarge.copyWith(
                           color: item.isDestructive ? Colors.redAccent : null)),
+                  subtitle: item.subtitle != null
+                      ? Text(item.subtitle!,
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textHint))
+                      : null,
                   trailing: const Icon(Icons.chevron_right_rounded,
                       color: AppColors.textHint),
                   onTap: item.onTap,
@@ -414,47 +568,69 @@ class _ProfileTab extends ConsumerWidget {
 class _MenuItem {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final bool isDestructive;
   final VoidCallback? onTap;
   const _MenuItem({
     required this.icon,
     required this.label,
+    this.subtitle,
     this.isDestructive = false,
     this.onTap,
   });
 }
 
-List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) => [
-  _MenuItem(
-    icon: Icons.history_rounded,
-    label: 'Call History',
-    onTap: () {}, // TODO: /call-history
-  ),
-  _MenuItem(
-    icon: Icons.favorite_rounded,
-    label: 'Following',
-    onTap: () {}, // TODO: /following
-  ),
-  _MenuItem(
-    icon: Icons.support_agent_rounded,
-    label: 'Support',
-    onTap: () => context.go('/help'),
-  ),
-  _MenuItem(
-    icon: Icons.settings_rounded,
-    label: 'Settings',
-    onTap: () => context.go('/settings'),
-  ),
-  _MenuItem(
-    icon: Icons.logout_rounded,
-    label: 'Logout',
-    isDestructive: true,
-    onTap: () async {
-      await ref.read(authProvider.notifier).logout();
-      if (context.mounted) context.go('/login');
-    },
-  ),
-];
+List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) {
+  final isHost = ref.read(authProvider).user?.isHost ?? false;
+  return [
+    // ── Host-specific ──────────────────────────────────────────────────────
+    if (isHost)
+      _MenuItem(
+        icon: Icons.dashboard_rounded,
+        label: 'Host Dashboard',
+        subtitle: 'Earnings, calls & online status',
+        onTap: () => context.go('/host-dashboard'),
+      )
+    else
+      _MenuItem(
+        icon: Icons.headset_mic_rounded,
+        label: 'Become a Host',
+        subtitle: 'Earn by taking calls',
+        onTap: () => context.go('/become-host'),
+      ),
+
+    // ── Common ─────────────────────────────────────────────────────────────
+    _MenuItem(
+      icon: Icons.history_rounded,
+      label: 'Call History',
+      onTap: () => context.go('/call-history'),
+    ),
+    _MenuItem(
+      icon: Icons.favorite_rounded,
+      label: 'Following',
+      onTap: () => context.go('/following'),
+    ),
+    _MenuItem(
+      icon: Icons.support_agent_rounded,
+      label: 'Support',
+      onTap: () => context.go('/help'),
+    ),
+    _MenuItem(
+      icon: Icons.settings_rounded,
+      label: 'Settings',
+      onTap: () => context.go('/settings'),
+    ),
+    _MenuItem(
+      icon: Icons.logout_rounded,
+      label: 'Logout',
+      isDestructive: true,
+      onTap: () async {
+        await ref.read(authProvider.notifier).logout();
+        if (context.mounted) context.go('/login');
+      },
+    ),
+  ];
+}
 
 // Incoming call is now handled globally by IncomingCallOverlay in main.dart.
 // No per-screen dialog or socket listener needed here.
