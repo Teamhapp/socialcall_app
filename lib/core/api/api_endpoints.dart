@@ -20,8 +20,9 @@ class ApiEndpoints {
   static const String me      = '/api/auth/me';
 
   // User
-  static const String profile = '/api/users/profile';
-  static const String fcmToken = '/api/users/fcm-token';
+  static const String profile        = '/api/users/profile';
+  static const String profileUpdate  = '/api/users/profile'; // PATCH
+  static const String fcmToken       = '/api/users/fcm-token';
 
   // Hosts
   static const String hosts = '/api/hosts';
