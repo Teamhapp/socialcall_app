@@ -14,6 +14,7 @@ class WebRTCService {
   String? _callId;
   bool _isCaller = false;
   bool _isVideo = false;
+  List<Map<String, dynamic>>? _iceServers;
 
   // Callbacks set by CallScreen
   void Function()? onConnected;
@@ -25,12 +26,20 @@ class WebRTCService {
   MessageCallback? _answerCb;
   MessageCallback? _iceCb;
 
-  static const _iceConfig = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'stun:stun1.l.google.com:19302'},
-      {'urls': 'stun:stun2.l.google.com:19302'},
-    ],
+  // Default ICE servers — used when the backend fetch fails.
+  // Includes Metered open relay as a free TURN fallback so calls work on
+  // most mobile networks even without a dedicated TURN server configured.
+  static const _defaultIceServers = [
+    {'urls': 'stun:stun.l.google.com:19302'},
+    {'urls': 'stun:stun1.l.google.com:19302'},
+    {'urls': 'stun:stun2.l.google.com:19302'},
+    {'urls': 'turn:openrelay.metered.ca:80',  'username': 'openrelayproject', 'credential': 'openrelayproject'},
+    {'urls': 'turn:openrelay.metered.ca:443', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
+    {'urls': 'turns:openrelay.metered.ca:443','username': 'openrelayproject', 'credential': 'openrelayproject'},
+  ];
+
+  Map<String, dynamic> _buildIceConfig(List<Map<String, dynamic>>? servers) => {
+    'iceServers': servers ?? _defaultIceServers,
     'sdpSemantics': 'unified-plan',
   };
 
@@ -42,14 +51,17 @@ class WebRTCService {
   }
 
   /// Call this after the host accepts (caller receives call_connected event).
+  /// [iceServers] — fetched from backend; falls back to defaults if null.
   Future<void> start({
     required String callId,
     required bool isCaller,
     required bool isVideo,
+    List<Map<String, dynamic>>? iceServers,
   }) async {
     _callId = callId;
     _isCaller = isCaller;
     _isVideo = isVideo;
+    _iceServers = iceServers;
 
     await _startLocalStream();
     await _createPeerConnection();
@@ -74,7 +86,7 @@ class WebRTCService {
   }
 
   Future<void> _createPeerConnection() async {
-    _peerConnection = await createPeerConnection(_iceConfig);
+    _peerConnection = await createPeerConnection(_buildIceConfig(_iceServers));
 
     // Add local tracks to the connection
     for (final track in _localStream!.getTracks()) {

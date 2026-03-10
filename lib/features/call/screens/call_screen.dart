@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/services/call_notification_service.dart';
 import '../../../core/services/webrtc_service.dart';
 import '../../../core/socket/socket_service.dart';
@@ -56,6 +58,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
   MessageCallback? _callConnectedCb;
   MessageCallback? _callRejectedCb;
   MessageCallback? _callSummaryCb;
+  MessageCallback? _walletWarnCb;   // server-side low-balance warning
 
   // ── Animations ───────────────────────────────────────────────────────────────
   late AnimationController _pulseController;
@@ -116,6 +119,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
     if (_callSummaryCb != null) {
       SocketService.off('call_summary', _callSummaryCb);
     }
+    if (_walletWarnCb != null) {
+      SocketService.off('wallet_low_warning', _walletWarnCb);
+    }
     _webrtc.dispose();
     super.dispose();
   }
@@ -123,6 +129,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
   // ─────────────────────────────────────────────────────────────────────────────
   // WebRTC initialisation + socket event wiring
   // ─────────────────────────────────────────────────────────────────────────────
+
+  /// Fetches ICE server list from backend (includes TURN if configured).
+  /// Falls back to hardcoded defaults on any error so calls still work.
+  Future<List<Map<String, dynamic>>?> _fetchIceServers() async {
+    try {
+      final resp = await ApiClient.dio.get(ApiEndpoints.iceServers);
+      final raw = ApiClient.parseData(resp) as List?;
+      return raw?.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return null; // WebRTCService will use built-in defaults
+    }
+  }
 
   Future<void> _initWebRTC() async {
     await _webrtc.initialize();
@@ -162,14 +180,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (mounted) setState(() {});
     };
 
+    // Fetch ICE servers (STUN + TURN) from backend once for this call.
+    final iceServers = await _fetchIceServers();
+
     // ── Caller: wait for host acceptance → start WebRTC ───────────────────────
     if (widget.isCaller) {
       _callConnectedCb = (data) async {
         if (data['callId'] != widget.callId) return;
         await _webrtc.start(
-          callId:   widget.callId,
-          isCaller: true,
-          isVideo:  widget.isVideo,
+          callId:     widget.callId,
+          isCaller:   true,
+          isVideo:    widget.isVideo,
+          iceServers: iceServers,
         );
         if (mounted) setState(() {});
       };
@@ -177,9 +199,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
     } else {
       // Host (receiver): start WebRTC immediately after accepting.
       await _webrtc.start(
-        callId:   widget.callId,
-        isCaller: false,
-        isVideo:  widget.isVideo,
+        callId:     widget.callId,
+        isCaller:   false,
+        isVideo:    widget.isVideo,
+        iceServers: iceServers,
       );
       if (mounted) setState(() {});
     }
@@ -196,6 +219,13 @@ class _CallScreenState extends ConsumerState<CallScreen>
       context.go('/home');
     };
     SocketService.on('call_rejected', _callRejectedCb!);
+
+    // ── Server-side low-balance warning (authoritative — uses real DB balance) ─
+    _walletWarnCb = (data) {
+      if ((data['callId'] as String?) != widget.callId) return;
+      if (mounted && !_lowBalance) setState(() => _lowBalance = true);
+    };
+    SocketService.on('wallet_low_warning', _walletWarnCb!);
 
     // ── Backend billing result — call ended by either party ───────────────────
     _callSummaryCb = (data) {
