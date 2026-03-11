@@ -52,4 +52,5 @@ class ApiEndpoints {
   static const String walletTransactions = '/api/wallet/transactions';
   static const String gifts = '/api/wallet/gifts';
   static const String sendGift = '/api/wallet/gift';
+  static const String redeemPromo = '/api/wallet/redeem-promo';
 }

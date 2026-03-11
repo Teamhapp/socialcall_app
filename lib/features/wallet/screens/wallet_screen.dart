@@ -20,6 +20,7 @@ class WalletScreen extends ConsumerStatefulWidget {
 class _WalletScreenState extends ConsumerState<WalletScreen>
     with SingleTickerProviderStateMixin {
   bool _isProcessing = false;
+  bool _isRedeeming = false;
   late AnimationController _shimmerController;
   late Animation<double> _shimmerAnim;
   late Razorpay _razorpay;
@@ -231,6 +232,175 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
     );
   }
 
+  // ─── Promo code sheet ───────────────────────────────────────────────
+  void _showRedeemCodeSheet() {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🎟️', style: TextStyle(fontSize: 24)),
+                const SizedBox(width: 10),
+                Text('Redeem Promo Code', style: AppTextStyles.headingSmall),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Enter a promo code to get free wallet credits',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: ctrl,
+              textCapitalization: TextCapitalization.characters,
+              style: AppTextStyles.headingMedium
+                  .copyWith(color: AppColors.primary, letterSpacing: 2),
+              decoration: InputDecoration(
+                hintText: 'e.g. WELCOME50',
+                hintStyle: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textHint, letterSpacing: 1),
+                prefixIcon: const Icon(Icons.confirmation_number_rounded,
+                    color: AppColors.primary),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear_rounded,
+                      color: AppColors.textHint, size: 18),
+                  onPressed: () => ctrl.clear(),
+                ),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            StatefulBuilder(
+              builder: (ctx, setSt) => GradientButton(
+                label: _isRedeeming ? 'Redeeming…' : 'Redeem Code',
+                height: 52,
+                isLoading: _isRedeeming,
+                icon: _isRedeeming
+                    ? null
+                    : const Icon(Icons.redeem_rounded,
+                        color: Colors.white, size: 18),
+                onTap: _isRedeeming
+                    ? null
+                    : () async {
+                        final code = ctrl.text.trim().toUpperCase();
+                        if (code.isEmpty) return;
+                        setSt(() => _isRedeeming = true);
+                        setState(() => _isRedeeming = true);
+                        try {
+                          final result = await ref
+                              .read(walletProvider.notifier)
+                              .redeemPromoCode(code);
+                          if (mounted) {
+                            Navigator.pop(context);
+                            _showPromoSuccessSheet(
+                              result['amount'] as num,
+                              result['code'] as String,
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            _showErrorSnack(
+                              e.toString().replaceAll('Exception: ', ''),
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => _isRedeeming = false);
+                          }
+                        }
+                      },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPromoSuccessSheet(num amount, String code) {
+    HapticFeedback.mediumImpact();
+    final balance = ref.read(walletProvider).balance;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Text('🎉',
+                  style: TextStyle(fontSize: 40),
+                  textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: 16),
+            Text('Code Redeemed!', style: AppTextStyles.headingMedium),
+            const SizedBox(height: 4),
+            Text(
+              code,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.primary,
+                letterSpacing: 2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
+                style: AppTextStyles.bodyMedium,
+                children: [
+                  const TextSpan(text: '₹'),
+                  TextSpan(
+                    text: '${amount.toInt()}',
+                    style: AppTextStyles.headingLarge
+                        .copyWith(color: AppColors.primary),
+                  ),
+                  const TextSpan(text: ' has been credited\nto your wallet'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'New balance: ₹${balance.toStringAsFixed(2)}',
+              style:
+                  AppTextStyles.labelMedium.copyWith(color: AppColors.textHint),
+            ),
+            const SizedBox(height: 24),
+            GradientButton(
+              label: 'Awesome!',
+              height: 50,
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ─── Custom amount dialog ───────────────────────────────────────────
   void _showCustomAmountDialog() {
     final ctrl = TextEditingController();
@@ -386,6 +556,26 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                             color: Colors.white, size: 18),
                         onTap:
                             _isProcessing ? null : _showCustomAmountDialog,
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Promo code button
+                      OutlinedButton.icon(
+                        onPressed: _showRedeemCodeSheet,
+                        icon: const Icon(Icons.confirmation_number_rounded,
+                            size: 18),
+                        label: const Text('Have a Promo Code?'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(
+                              color: AppColors.primary, width: 1.5),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          minimumSize: const Size(double.infinity, 48),
+                          textStyle:
+                              AppTextStyles.labelMedium,
+                        ),
                       ),
 
                       const SizedBox(height: 8),

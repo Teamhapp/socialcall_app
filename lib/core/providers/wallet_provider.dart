@@ -95,6 +95,16 @@ class WalletNotifier extends StateNotifier<WalletState> {
     await fetchWallet(); // Refresh balance
   }
 
+  Future<Map<String, dynamic>> redeemPromoCode(String code) async {
+    final resp = await ApiClient.dio.post(
+      ApiEndpoints.redeemPromo,
+      data: {'code': code.trim().toUpperCase()},
+    );
+    final data = ApiClient.parseData(resp) as Map<String, dynamic>;
+    await fetchWallet(); // Refresh balance after credit
+    return data;
+  }
+
   void updateBalance(double newBalance) {
     state = state.copyWith(balance: newBalance);
   }
