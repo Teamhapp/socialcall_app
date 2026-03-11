@@ -50,6 +50,10 @@ class ApiEndpoints {
   static const String conversations = '/api/chat';
   static String messages(String userId) => '/api/chat/$userId';
 
+  // User actions
+  static const String hostPayout   = '/api/hosts/payout';
+  static const String deleteAccount = '/api/users/me'; // DELETE
+
   // Wallet
   static const String walletOrder = '/api/wallet/order';
   static const String walletVerify = '/api/wallet/verify';

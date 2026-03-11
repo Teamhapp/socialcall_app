@@ -1,10 +1,12 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/storage/storage_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -235,11 +237,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     .copyWith(color: AppColors.textHint)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isEmpty) return;
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Name updated!')),
-              );
+              try {
+                await ApiClient.dio.patch(
+                  ApiEndpoints.profileUpdate,
+                  data: {'name': name},
+                );
+                // Refresh in-memory user state
+                await ref.read(authProvider.notifier).refreshBalance();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Name updated!')),
+                  );
+                }
+              } on DioException catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiClient.errorMessage(e))),
+                  );
+                }
+              }
             },
             child: Text('Save',
                 style:
@@ -398,7 +418,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     .copyWith(color: AppColors.textHint)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await ApiClient.dio.delete(ApiEndpoints.deleteAccount);
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) context.go('/login');
+              } on DioException catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiClient.errorMessage(e))),
+                  );
+                }
+              }
+            },
             child: Text('Delete',
                 style: AppTextStyles.labelLarge
                     .copyWith(color: AppColors.callRed)),

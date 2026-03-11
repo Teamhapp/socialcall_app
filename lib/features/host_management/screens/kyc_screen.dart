@@ -412,7 +412,7 @@ class _KycScreenState extends ConsumerState<KycScreen> {
             hint: 'Hold the document next to your face',
             image: _selfieImage,
             onTap: () => _pickImage('selfie'),
-            icon: Icons.selfie_rounded,
+            icon: Icons.camera_front_rounded,
           ),
 
           const SizedBox(height: 32),

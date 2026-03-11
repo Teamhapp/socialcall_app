@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:go_router/go_router.dart';
@@ -379,11 +380,153 @@ class _CallScreenState extends ConsumerState<CallScreen>
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                context.go('/home');
+                // Show rating sheet for callers after a real call
+                if (widget.isCaller && _seconds > 0) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _showRatingSheet();
+                  });
+                } else {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) context.go('/home');
+                  });
+                }
               },
               child: const Text('Done'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Post-call rating sheet (callers only)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  void _showRatingSheet() {
+    double rating = 0;
+    final commentCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (_, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            24, 24, 24,
+            MediaQuery.of(sheetCtx).viewInsets.bottom + 32,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Icon(Icons.star_rounded,
+                  color: AppColors.gold, size: 36),
+              const SizedBox(height: 12),
+              Text('Rate Your Call',
+                  style: AppTextStyles.headingMedium),
+              const SizedBox(height: 6),
+              Text(
+                'How was your call with ${widget.host.name}?',
+                style: AppTextStyles.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              RatingBar.builder(
+                initialRating: 0,
+                minRating: 1,
+                direction: Axis.horizontal,
+                allowHalfRating: false,
+                itemCount: 5,
+                itemPadding:
+                    const EdgeInsets.symmetric(horizontal: 6),
+                itemBuilder: (_, __) => const Icon(
+                    Icons.star_rounded,
+                    color: AppColors.gold),
+                onRatingUpdate: (r) =>
+                    setSheetState(() => rating = r),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: commentCtrl,
+                maxLines: 3,
+                style: AppTextStyles.bodyLarge,
+                decoration: const InputDecoration(
+                  hintText: 'Leave a comment (optional)...',
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        if (mounted) context.go('/home');
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: AppColors.border),
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14),
+                      ),
+                      child: const Text('Skip'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: rating == 0
+                          ? null
+                          : () async {
+                              Navigator.pop(sheetCtx);
+                              try {
+                                await ApiClient.dio.post(
+                                  ApiEndpoints.callReview(
+                                      widget.callId),
+                                  data: {
+                                    'rating': rating.toInt(),
+                                    if (commentCtrl.text
+                                        .trim()
+                                        .isNotEmpty)
+                                      'comment': commentCtrl.text
+                                          .trim(),
+                                  },
+                                );
+                              } catch (_) {
+                                // rating is best-effort — never block navigation
+                              }
+                              if (mounted) context.go('/home');
+                            },
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14),
+                      ),
+                      child: const Text('Submit'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

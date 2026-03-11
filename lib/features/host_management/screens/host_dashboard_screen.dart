@@ -470,6 +470,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   }
 
   void _showPayoutDialog() {
+    final pendingAmount =
+        (_host?['pending_earnings'] as num? ?? 0).toDouble();
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -481,13 +484,13 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Pending: ₹${(_host?['pending_earnings'] as num? ?? 0).toStringAsFixed(2)}',
+              'Pending: ₹${pendingAmount.toStringAsFixed(2)}',
               style: AppTextStyles.headingMedium
                   .copyWith(color: AppColors.primary),
             ),
             const SizedBox(height: 12),
             Text(
-              'Payouts are processed within 3–5 business days to your linked bank account. Minimum payout: ₹500.',
+              'Payouts are processed within 3–5 business days. Minimum payout: ₹500.',
               style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -499,13 +502,27 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text(
-                        'Payout request submitted! We\'ll process it soon.')),
-              );
+              try {
+                final resp = await ApiClient.dio
+                    .post(ApiEndpoints.hostPayout);
+                final msg =
+                    (resp.data as Map<String, dynamic>)['message']
+                        as String? ??
+                    'Payout request submitted!';
+                if (mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(msg)));
+                }
+                await _load(); // refresh earnings display
+              } on DioException catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ApiClient.errorMessage(e))),
+                  );
+                }
+              }
             },
             child: const Text('Request'),
           ),

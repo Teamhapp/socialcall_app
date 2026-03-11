@@ -26,6 +26,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConf = true;
   String _countryCode = '+91';
 
+  // (flag, name, dialCode)
+  static const _countryData = [
+    ('🇮🇳', 'India',          '+91'),
+    ('🇺🇸', 'United States',  '+1'),
+    ('🇬🇧', 'United Kingdom', '+44'),
+    ('🇦🇪', 'UAE',            '+971'),
+    ('🇸🇬', 'Singapore',      '+65'),
+    ('🇦🇺', 'Australia',      '+61'),
+    ('🇨🇦', 'Canada',         '+1'),
+    ('🇩🇪', 'Germany',        '+49'),
+    ('🇿🇦', 'South Africa',   '+27'),
+    ('🇳🇬', 'Nigeria',        '+234'),
+  ];
+
   String get _countryFlag =>
       _countryData.firstWhere((c) => c.$3 == _countryCode,
           orElse: () => _countryData.first).$1;
