@@ -11,6 +11,8 @@ import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/gradient_button.dart';
+// ignore: unused_import
+import 'kyc_screen.dart';
 
 class HostDashboardScreen extends ConsumerStatefulWidget {
   const HostDashboardScreen({super.key});
@@ -452,6 +454,14 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                           (call) => _HostCallTile(call: call),
                         ),
 
+                  const SizedBox(height: 24),
+
+                  // ── KYC Verification Banner ───────────────────────────
+                  _KycBanner(
+                    isVerified: _host?['is_verified'] as bool? ?? false,
+                    kycStatus: _host?['kyc_status'] as String? ?? 'not_submitted',
+                  ),
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -697,6 +707,116 @@ class _HostCallTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── KYC Banner ────────────────────────────────────────────────────────────────
+
+class _KycBanner extends StatelessWidget {
+  final bool isVerified;
+  final String kycStatus;
+
+  const _KycBanner({required this.isVerified, required this.kycStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isVerified) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.callGreen.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.callGreen.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_rounded, color: AppColors.callGreen, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Identity Verified',
+                      style: AppTextStyles.labelLarge.copyWith(color: AppColors.callGreen)),
+                  Text('Your KYC is approved. Payouts are enabled.',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Color bannerColor;
+    IconData bannerIcon;
+    String title;
+    String subtitle;
+    String buttonLabel;
+
+    switch (kycStatus) {
+      case 'pending':
+        bannerColor = AppColors.warning;
+        bannerIcon = Icons.hourglass_top_rounded;
+        title = 'KYC Under Review';
+        subtitle = 'Your documents are being reviewed. Usually done in 24h.';
+        buttonLabel = 'Check Status';
+      case 'rejected':
+        bannerColor = AppColors.callRed;
+        bannerIcon = Icons.cancel_rounded;
+        title = 'KYC Rejected';
+        subtitle = 'Your submission was rejected. Please resubmit with valid documents.';
+        buttonLabel = 'Resubmit';
+      default:
+        bannerColor = AppColors.primary;
+        bannerIcon = Icons.badge_rounded;
+        title = 'Verify Your Identity';
+        subtitle = 'Complete KYC to unlock payouts and get the verified badge.';
+        buttonLabel = 'Start KYC';
+    }
+
+    return GestureDetector(
+      onTap: () => context.push('/kyc'),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: bannerColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: bannerColor.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(bannerIcon, color: bannerColor, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: AppTextStyles.labelLarge.copyWith(color: bannerColor)),
+                  Text(subtitle,
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: bannerColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                buttonLabel,
+                style: AppTextStyles.caption.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

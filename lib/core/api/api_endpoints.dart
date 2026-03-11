@@ -24,6 +24,10 @@ class ApiEndpoints {
   static const String profileUpdate  = '/api/users/profile'; // PATCH
   static const String fcmToken       = '/api/users/fcm-token';
 
+  // KYC
+  static const String kycSubmit = '/api/hosts/kyc';
+  static const String kycStatus = '/api/hosts/kyc';
+
   // Hosts
   static const String hosts = '/api/hosts';
   static String hostById(String id) => '/api/hosts/$id';

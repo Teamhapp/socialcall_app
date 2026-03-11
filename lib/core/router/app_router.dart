@@ -15,6 +15,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/help/screens/help_screen.dart';
 import '../../features/host_management/screens/become_host_screen.dart';
 import '../../features/host_management/screens/host_dashboard_screen.dart';
+import '../../features/host_management/screens/kyc_screen.dart';
 import '../../features/call_history/screens/call_history_screen.dart';
 import '../../features/following/screens/following_screen.dart';
 import '../../models/host_model.dart';
@@ -69,6 +70,7 @@ class AppRouter {
       GoRoute(path: '/host-dashboard', builder: (_, __) => const HostDashboardScreen()),
       GoRoute(path: '/call-history', builder: (_, __) => const CallHistoryScreen()),
       GoRoute(path: '/following', builder: (_, __) => const FollowingScreen()),
+      GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Route not found: ${state.error}')),
