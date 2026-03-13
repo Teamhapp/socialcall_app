@@ -28,6 +28,14 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   bool _isLoading = true;
   bool _isTogglingStatus = false;
 
+  // PostgreSQL DECIMAL columns come back as strings from node-postgres.
+  // This helper safely parses both String and num values.
+  static double _d(dynamic v, [double fallback = 0.0]) {
+    if (v == null) return fallback;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fallback;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,9 +96,9 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     final bioCtrl =
         TextEditingController(text: _host?['bio'] as String? ?? '');
     final audioCtrl = TextEditingController(
-        text: (_host?['audio_rate_per_min'] as num?)?.toString() ?? '15');
+        text: _d(_host?['audio_rate_per_min'], 15).toInt().toString());
     final videoCtrl = TextEditingController(
-        text: (_host?['video_rate_per_min'] as num?)?.toString() ?? '40');
+        text: _d(_host?['video_rate_per_min'], 40).toInt().toString());
 
     showModalBottomSheet(
       context: context,
@@ -261,9 +269,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                                 style: AppTextStyles.headingMedium),
                             const SizedBox(height: 4),
                             RatingBarIndicator(
-                              rating: (_host?['rating'] as num?)
-                                      ?.toDouble() ??
-                                  0,
+                              rating: _d(_host?['rating']),
                               itemSize: 14,
                               itemBuilder: (_, __) => const Icon(
                                   Icons.star_rounded,
@@ -347,7 +353,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '₹${(_host?['total_earnings'] as num? ?? 0).toStringAsFixed(2)}',
+                              '₹${_d(_host?['total_earnings']).toStringAsFixed(2)}',
                               style: AppTextStyles.amount,
                             ),
                             const Spacer(),
@@ -358,7 +364,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                                     style: AppTextStyles.caption
                                         .copyWith(color: Colors.white60)),
                                 Text(
-                                  '₹${(_host?['pending_earnings'] as num? ?? 0).toStringAsFixed(2)}',
+                                  '₹${_d(_host?['pending_earnings']).toStringAsFixed(2)}',
                                   style: AppTextStyles.labelLarge
                                       .copyWith(color: Colors.white),
                                 ),
@@ -378,7 +384,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                                       style: AppTextStyles.caption
                                           .copyWith(color: Colors.white60)),
                                   Text(
-                                    '₹${(_host?['audio_rate_per_min'] as num?)?.toInt() ?? 0}/min',
+                                    '₹${_d(_host?['audio_rate_per_min']).toInt()}/min',
                                     style: AppTextStyles.labelLarge
                                         .copyWith(color: Colors.white),
                                   ),
@@ -394,7 +400,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                                       style: AppTextStyles.caption
                                           .copyWith(color: Colors.white60)),
                                   Text(
-                                    '₹${(_host?['video_rate_per_min'] as num?)?.toInt() ?? 0}/min',
+                                    '₹${_d(_host?['video_rate_per_min']).toInt()}/min',
                                     style: AppTextStyles.labelLarge
                                         .copyWith(color: Colors.white),
                                   ),
@@ -470,8 +476,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   }
 
   void _showPayoutDialog() {
-    final pendingAmount =
-        (_host?['pending_earnings'] as num? ?? 0).toDouble();
+    final pendingAmount = _d(_host?['pending_earnings']);
 
     showDialog(
       context: context,
@@ -648,8 +653,12 @@ class _HostCallTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isVideo = call['call_type'] == 'video';
     final duration = call['duration_seconds'] as int? ?? 0;
-    final earnings =
-        (call['host_earnings'] as num?)?.toStringAsFixed(2) ?? '0.00';
+    // host_earnings is DECIMAL in PostgreSQL → comes back as String from node-postgres
+    final earningsVal = call['host_earnings'];
+    final earnings = earningsVal == null
+        ? '0.00'
+        : (earningsVal is num ? earningsVal : double.tryParse(earningsVal.toString()) ?? 0.0)
+            .toStringAsFixed(2);
     final callerName = call['caller_name'] as String? ?? 'Unknown';
     final callerAvatar = call['caller_avatar'] as String?;
     final createdAt = call['created_at'] != null

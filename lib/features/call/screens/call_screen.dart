@@ -239,7 +239,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
       ref.read(authProvider.notifier).refreshBalance();
 
       final dSec     = data['durationSeconds'] as int?   ?? _seconds;
-      final charged  = (data['amountCharged']  as num?)?.toDouble() ?? _cost;
+      final rawCharged = data['amountCharged'];
+      final charged = rawCharged == null ? _cost
+          : (rawCharged is num ? rawCharged.toDouble() : double.tryParse(rawCharged.toString()) ?? _cost);
       final autoEnded = data['autoEnded'] as bool? ?? false;
 
       if (mounted) {

@@ -29,20 +29,27 @@ class HostModel {
     required this.followersCount,
   });
 
+  // PostgreSQL DECIMAL/NUMERIC columns are returned as strings by node-postgres.
+  static double _pd(dynamic v, [double fb = 0.0]) {
+    if (v == null) return fb;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fb;
+  }
+
   factory HostModel.fromJson(Map<String, dynamic> json) => HostModel(
-        id: json['id'],
-        userId: json['user_id'],
-        name: json['name'],
-        avatar: json['avatar'],
-        bio: json['bio'] ?? '',
+        id: json['id'].toString(),
+        userId: json['user_id'].toString(),
+        name: json['name'] as String? ?? 'Host',
+        avatar: json['avatar'] as String?,
+        bio: json['bio'] as String? ?? '',
         languages: List<String>.from(json['languages'] ?? []),
-        audioRatePerMin: (json['audio_rate_per_min'] as num).toDouble(),
-        videoRatePerMin: (json['video_rate_per_min'] as num).toDouble(),
-        rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-        totalCalls: json['total_calls'] ?? 0,
-        isOnline: json['is_online'] ?? false,
-        isVerified: json['is_verified'] ?? false,
-        followersCount: json['followers_count'] ?? 0,
+        audioRatePerMin: _pd(json['audio_rate_per_min'], 15),
+        videoRatePerMin: _pd(json['video_rate_per_min'], 40),
+        rating: _pd(json['rating']),
+        totalCalls: json['total_calls'] as int? ?? 0,
+        isOnline: json['is_online'] as bool? ?? false,
+        isVerified: json['is_verified'] as bool? ?? false,
+        followersCount: json['followers_count'] as int? ?? 0,
       );
 
   // Demo data for UI testing

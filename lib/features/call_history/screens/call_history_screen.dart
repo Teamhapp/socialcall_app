@@ -242,10 +242,12 @@ class _CallTileState extends State<_CallTile> {
   Widget build(BuildContext context) {
     final isVideo = widget.call['call_type'] == 'video';
     final duration = widget.call['duration_seconds'] as int? ?? 0;
-    final amount = (widget.call[widget.asHost ? 'host_earnings' : 'amount_charged']
-            as num?)
-        ?.toStringAsFixed(2) ??
-        '0.00';
+    // DECIMAL columns from PostgreSQL come as strings via node-postgres
+    final rawAmount = widget.call[widget.asHost ? 'host_earnings' : 'amount_charged'];
+    final amount = rawAmount == null
+        ? '0.00'
+        : (rawAmount is num ? rawAmount : double.tryParse(rawAmount.toString()) ?? 0.0)
+            .toStringAsFixed(2);
     final otherName = widget.asHost
         ? (widget.call['caller_name'] as String? ?? 'Unknown')
         : (widget.call['host_name'] as String? ?? 'Unknown');
