@@ -64,10 +64,19 @@ class SocketService {
   static void off(String event, [MessageCallback? callback]) {
     if (callback != null) {
       _listeners[event]?.remove(callback);
+      if (_listeners[event]?.isEmpty ?? false) _listeners.remove(event);
     } else {
       _listeners.remove(event);
     }
+
+    // socket_io_client's off(event) removes ALL native handlers for that event.
+    // Remove all, then re-register any remaining Dart callbacks.
     _socket?.off(event);
+    for (final cb in List<MessageCallback>.from(_listeners[event] ?? [])) {
+      _socket?.on(event, (data) => cb(
+        data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+      ));
+    }
   }
 
   static void emit(String event, Map<String, dynamic> data) {

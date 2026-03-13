@@ -111,13 +111,14 @@ class WebRTCService {
       }
     };
 
-    // P2P connection state changes
+    // P2P connection state changes.
+    // RTCPeerConnectionStateDisconnected is TRANSIENT — WebRTC retries ICE
+    // automatically. Only RTCPeerConnectionStateFailed (permanent) should end
+    // the call; treating Disconnected as failure kills calls on brief glitches.
     _peerConnection!.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         onConnected?.call();
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state ==
-              RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         onConnectionFailed?.call();
       }
     };
@@ -169,12 +170,21 @@ class WebRTCService {
     // Both: add ICE candidates from the other party
     _iceCb = (data) async {
       if (data['callId'] != _callId) return;
-      final c = data['candidate'] as Map<String, dynamic>;
-      await _peerConnection!.addCandidate(RTCIceCandidate(
-        c['candidate'] as String,
-        c['sdpMid'] as String?,
-        (c['sdpMLineIndex'] as num?)?.toInt(),
-      ));
+      if (_peerConnection == null) return; // already disposed
+      final c = data['candidate'] as Map<String, dynamic>?;
+      if (c == null) return;
+      // null/empty candidate = end-of-candidates signal — safe to ignore
+      final candidateStr = c['candidate'] as String?;
+      if (candidateStr == null || candidateStr.isEmpty) return;
+      try {
+        await _peerConnection!.addCandidate(RTCIceCandidate(
+          candidateStr,
+          c['sdpMid'] as String?,
+          (c['sdpMLineIndex'] as num?)?.toInt(),
+        ));
+      } catch (_) {
+        // Ignore stale candidates (peer connection may have been closed)
+      }
     };
     SocketService.on('webrtc_ice_candidate', _iceCb!);
   }
