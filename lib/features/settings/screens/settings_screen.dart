@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
@@ -182,12 +183,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _SettingsTile(
             icon: Icons.description_rounded,
             label: 'Terms of Service',
-            onTap: () {},
+            onTap: () => launchUrl(
+              Uri.parse('https://socialcallbackend.replit.app/terms'),
+              mode: LaunchMode.externalApplication,
+            ),
           ),
           _SettingsTile(
             icon: Icons.privacy_tip_rounded,
             label: 'Privacy Policy',
-            onTap: () {},
+            onTap: () => launchUrl(
+              Uri.parse('https://socialcallbackend.replit.app/privacy'),
+              mode: LaunchMode.externalApplication,
+            ),
           ),
 
           const SizedBox(height: 40),

@@ -52,6 +52,7 @@ class ApiEndpoints {
 
   // User actions
   static const String hostPayout   = '/api/hosts/payout';
+  static const String hostPayouts  = '/api/hosts/payouts';
   static const String deleteAccount = '/api/users/me'; // DELETE
 
   // Wallet

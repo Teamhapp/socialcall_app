@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
@@ -20,6 +21,45 @@ class HostProfileScreen extends StatefulWidget {
 
 class _HostProfileScreenState extends State<HostProfileScreen> {
   bool _isStartingCall = false;
+  bool _isFollowing = false;
+  bool _isTogglingFollow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFollowing();
+  }
+
+  Future<void> _checkFollowing() async {
+    try {
+      final resp = await ApiClient.dio.get(ApiEndpoints.hostFollowing);
+      final list = (ApiClient.parseData(resp) as List? ?? [])
+          .cast<Map<String, dynamic>>();
+      if (mounted) {
+        setState(() {
+          _isFollowing = list.any((h) => h['id'] == widget.host.id);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_isTogglingFollow) return;
+    setState(() => _isTogglingFollow = true);
+    HapticFeedback.lightImpact();
+    try {
+      await ApiClient.dio.post(ApiEndpoints.hostFollow(widget.host.id));
+      if (mounted) setState(() => _isFollowing = !_isFollowing);
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.errorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isTogglingFollow = false);
+    }
+  }
 
   /// Initiates a call: POSTs to /api/calls/initiate, then navigates to CallScreen.
   Future<void> _startCall(bool isVideo) async {
@@ -96,9 +136,20 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.favorite_border_rounded,
-                            color: Colors.white, size: 20),
-                        onPressed: () {},
+                        icon: _isTogglingFollow
+                            ? const SizedBox(
+                                width: 18, height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : Icon(
+                                _isFollowing
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: _isFollowing
+                                    ? Colors.redAccent
+                                    : Colors.white,
+                                size: 20),
+                        onPressed: _toggleFollow,
                       ),
                     ),
                   ),

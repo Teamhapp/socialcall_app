@@ -302,20 +302,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        itemCount:
-                            _messages.length + (_isTyping ? 1 : 0),
-                        itemBuilder: (_, i) {
-                          if (_isTyping && i == _messages.length) {
-                            return _TypingIndicator(host: widget.host);
-                          }
-                          final msg = _messages[i];
-                          final isMe = msg.senderId == _myUserId;
-                          return _MessageBubble(message: msg, isMe: isMe);
-                        },
+                    : RefreshIndicator(
+                        onRefresh: _loadHistory,
+                        color: AppColors.primary,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          itemCount:
+                              _messages.length + (_isTyping ? 1 : 0),
+                          itemBuilder: (_, i) {
+                            if (_isTyping && i == _messages.length) {
+                              return _TypingIndicator(host: widget.host);
+                            }
+                            final msg = _messages[i];
+                            final isMe = msg.senderId == _myUserId;
+                            return _MessageBubble(message: msg, isMe: isMe);
+                          },
+                        ),
                       ),
           ),
 

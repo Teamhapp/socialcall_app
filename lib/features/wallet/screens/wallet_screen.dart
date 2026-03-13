@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../core/theme/app_colors.dart';
@@ -591,7 +592,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                               style: AppTextStyles.headingSmall),
                           const Spacer(),
                           TextButton(
-                            onPressed: () {},
+                            onPressed: () => context.go('/call-history'),
                             child: const Text('View All'),
                           ),
                         ],

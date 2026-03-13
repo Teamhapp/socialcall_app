@@ -19,16 +19,20 @@ class UserModel {
     required this.createdAt,
   });
 
+  // Safely parses PostgreSQL DECIMAL/NUMERIC which arrives as String from node-postgres
+  static double _pd(dynamic v, [double fb = 0.0]) {
+    if (v == null) return fb;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fb;
+  }
+
   // Handles both camelCase (auth response) and snake_case (profile/DB)
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
         id: json['id'].toString(),
         name: (json['name'] as String?) ?? 'User',
         phone: (json['phone'] as String?) ?? '',
         avatar: json['avatar'] as String?,
-        walletBalance:
-            ((json['walletBalance'] ?? json['wallet_balance']) as num?)
-                    ?.toDouble() ??
-                0.0,
+        walletBalance: _pd(json['walletBalance'] ?? json['wallet_balance']),
         isHost: ((json['isHost'] ?? json['is_host']) as bool?) ?? false,
         hasPassword: (json['hasPassword'] as bool?) ?? false,
         createdAt: json['created_at'] != null

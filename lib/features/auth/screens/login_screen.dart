@@ -276,30 +276,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   isLoading: _isLoading,
                 ),
 
-                // ── Register link (password mode only) ────────────────────────
-                if (!isOtp) ...[
-                  const SizedBox(height: 16),
-                  Center(
-                    child: GestureDetector(
-                      onTap: () => context.go('/register'),
-                      child: RichText(
-                        text: TextSpan(
-                          style: AppTextStyles.bodyMedium,
-                          children: [
-                            const TextSpan(text: "Don't have an account? "),
-                            TextSpan(
-                              text: 'Register',
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
+                // ── Register link (always visible) ───────────────────────
+                const SizedBox(height: 16),
+                Center(
+                  child: GestureDetector(
+                    onTap: () => context.go('/register'),
+                    child: RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.bodyMedium,
+                        children: [
+                          const TextSpan(text: "Don't have an account? "),
+                          TextSpan(
+                            text: 'Create Account',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
 
                 const SizedBox(height: 24),
 
@@ -343,7 +341,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 // ── Become a host ─────────────────────────────────────────────
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () => context.go('/register'),
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

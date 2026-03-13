@@ -192,23 +192,28 @@ class _FollowingTile extends StatelessWidget {
                       .copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: host.isOnline
-                        ? AppColors.primaryGradient
-                        : null,
-                    color: host.isOnline ? null : AppColors.border,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    'Call',
-                    style: AppTextStyles.caption.copyWith(
-                      color: host.isOnline
-                          ? Colors.white
-                          : AppColors.textHint,
-                      fontWeight: FontWeight.w700,
+                GestureDetector(
+                  onTap: host.isOnline
+                      ? () => context.go('/host/${host.id}', extra: host)
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: host.isOnline
+                          ? AppColors.primaryGradient
+                          : null,
+                      color: host.isOnline ? null : AppColors.border,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      host.isOnline ? 'Call' : 'Offline',
+                      style: AppTextStyles.caption.copyWith(
+                        color: host.isOnline
+                            ? Colors.white
+                            : AppColors.textHint,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),

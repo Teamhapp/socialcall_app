@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
@@ -394,7 +396,7 @@ class _ChatListTabState extends State<_ChatListTab> {
                       followersCount: 0,
                     );
 
-                    return ListTile(
+                    final tile = ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 6),
                       leading: Stack(
@@ -469,6 +471,25 @@ class _ChatListTabState extends State<_ChatListTab> {
                           '/chat/$otherUserId',
                           extra: fakeHost),
                     );
+
+                    // Wrap in Dismissible for swipe-to-hide
+                    return Dismissible(
+                      key: Key('conv_$otherUserId'),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        color: AppColors.callRed.withOpacity(0.15),
+                        child: const Icon(Icons.delete_outline_rounded,
+                            color: AppColors.callRed),
+                      ),
+                      onDismissed: (_) {
+                        setState(() {
+                          _conversations.removeAt(i);
+                        });
+                      },
+                      child: tile,
+                    );
                   },
                 ),
               ),
@@ -487,11 +508,43 @@ class _ChatListTabState extends State<_ChatListTab> {
   }
 }
 
-class _ProfileTab extends ConsumerWidget {
+class _ProfileTab extends ConsumerStatefulWidget {
   const _ProfileTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends ConsumerState<_ProfileTab> {
+  bool _uploadingAvatar = false;
+
+  Future<void> _pickAndUploadAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+        source: ImageSource.gallery, imageQuality: 80, maxWidth: 800);
+    if (picked == null || !mounted) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(picked.path,
+            filename: 'avatar.jpg'),
+      });
+      await ApiClient.dio.patch(ApiEndpoints.profileUpdate, data: formData);
+      // Refresh user in state
+      await ref.read(authProvider.notifier).refreshBalance();
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.errorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
 
     return SafeArea(
@@ -501,32 +554,46 @@ class _ProfileTab extends ConsumerWidget {
           children: [
             const SizedBox(height: 20),
             // Avatar
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: user?.avatar != null
-                      ? NetworkImage(user!.avatar!) as ImageProvider
-                      : null,
-                  backgroundColor: AppColors.primary.withOpacity(0.2),
-                  child: user?.avatar == null
-                      ? const Icon(Icons.person_rounded,
-                          size: 50, color: AppColors.primary)
-                      : null,
-                ),
-                Positioned(
-                  bottom: 0, right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.edit_rounded,
-                        color: Colors.white, size: 16),
+            GestureDetector(
+              onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: user?.avatar != null
+                        ? NetworkImage(user!.avatar!) as ImageProvider
+                        : null,
+                    backgroundColor: AppColors.primary.withOpacity(0.2),
+                    child: user?.avatar == null
+                        ? const Icon(Icons.person_rounded,
+                            size: 50, color: AppColors.primary)
+                        : null,
                   ),
-                ),
-              ],
+                  if (_uploadingAvatar)
+                    const Positioned.fill(
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black38,
+                        child: SizedBox(
+                          width: 28, height: 28,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.edit_rounded,
+                          color: Colors.white, size: 16),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Text(user?.name ?? 'User', style: AppTextStyles.headingMedium),

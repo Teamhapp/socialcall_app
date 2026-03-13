@@ -27,10 +27,15 @@ class TransactionModel {
       'payout'                        => TransactionType.payout,
       _                               => TransactionType.recharge,
     };
+    // amount is a PostgreSQL DECIMAL — arrives as String from node-postgres
+    final rawAmount = json['amount'];
+    final amount = rawAmount == null
+        ? 0.0
+        : (rawAmount is num ? rawAmount.toDouble() : double.tryParse(rawAmount.toString()) ?? 0.0);
     return TransactionModel(
       id: json['id'] as String,
       type: type,
-      amount: (json['amount'] as num).toDouble(),
+      amount: amount,
       description: (json['description'] as String?) ?? '',
       isCredit: (json['is_credit'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),

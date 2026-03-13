@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -14,6 +15,7 @@ class _HelpScreenState extends State<HelpScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _expandedFaq = -1;
+  String _faqQuery = '';
 
   @override
   void initState() {
@@ -59,7 +61,12 @@ class _HelpScreenState extends State<HelpScreen>
         children: [
           _FaqTab(
             expandedIndex: _expandedFaq,
+            query: _faqQuery,
             onExpand: (i) => setState(() => _expandedFaq = _expandedFaq == i ? -1 : i),
+            onSearch: (q) => setState(() {
+              _faqQuery = q;
+              _expandedFaq = -1;
+            }),
           ),
           const _ContactTab(),
           const _ReportTab(),
@@ -73,9 +80,16 @@ class _HelpScreenState extends State<HelpScreen>
 
 class _FaqTab extends StatelessWidget {
   final int expandedIndex;
+  final String query;
   final ValueChanged<int> onExpand;
+  final ValueChanged<String> onSearch;
 
-  const _FaqTab({required this.expandedIndex, required this.onExpand});
+  const _FaqTab({
+    required this.expandedIndex,
+    required this.query,
+    required this.onExpand,
+    required this.onSearch,
+  });
 
   static const _faqs = [
     (
@@ -122,6 +136,15 @@ class _FaqTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Filter FAQs by search query
+    final filtered = query.isEmpty
+        ? _faqs.asMap().entries.toList()
+        : _faqs.asMap().entries.where((e) {
+            final q = query.toLowerCase();
+            return e.value.$1.toLowerCase().contains(q) ||
+                e.value.$2.toLowerCase().contains(q);
+          }).toList();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -133,21 +156,36 @@ class _FaqTab extends StatelessWidget {
             border: Border.all(color: AppColors.border),
           ),
           child: TextField(
+            onChanged: onSearch,
             style: AppTextStyles.bodyLarge,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'Search questions...',
-              hintStyle: TextStyle(color: AppColors.textHint, fontSize: 14),
-              prefixIcon: Icon(Icons.search_rounded, color: AppColors.textHint),
+              hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+              prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textHint),
+              suffixIcon: query.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppColors.textHint, size: 18),
+                      onPressed: () => onSearch(''),
+                    )
+                  : null,
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
         ),
         const SizedBox(height: 16),
+        if (filtered.isEmpty) ...[
+          const SizedBox(height: 40),
+          const Center(
+            child: Text('No matching questions found.',
+                style: TextStyle(color: AppColors.textHint)),
+          ),
+        ] else ...[
         Text('Frequently Asked Questions',
             style: AppTextStyles.headingSmall),
         const SizedBox(height: 12),
-        ..._faqs.asMap().entries.map((e) {
+        ...filtered.map((e) {
           final i = e.key;
           final faq = e.value;
           final isExpanded = expandedIndex == i;
@@ -207,6 +245,7 @@ class _FaqTab extends StatelessWidget {
           );
         }),
         const SizedBox(height: 24),
+        ], // end else
       ],
     );
   }
@@ -262,7 +301,10 @@ class _ContactTab extends StatelessWidget {
           subtitle: 'Chat with us instantly',
           detail: '+91 98765 43200',
           color: const Color(0xFF25D366),
-          onTap: () {},
+          onTap: () => launchUrl(
+            Uri.parse('https://wa.me/919876543200'),
+            mode: LaunchMode.externalApplication,
+          ),
         ),
         const SizedBox(height: 10),
         _ContactCard(
@@ -271,7 +313,10 @@ class _ContactTab extends StatelessWidget {
           subtitle: 'We reply within 24 hours',
           detail: 'support@socialcall.app',
           color: AppColors.accent,
-          onTap: () {},
+          onTap: () => launchUrl(
+            Uri.parse('mailto:support@socialcall.app?subject=SocialCall%20Support'),
+            mode: LaunchMode.externalApplication,
+          ),
         ),
         const SizedBox(height: 10),
         _ContactCard(
@@ -280,7 +325,10 @@ class _ContactTab extends StatelessWidget {
           subtitle: 'Follow us for updates',
           detail: '@socialcall.app',
           color: const Color(0xFFE1306C),
-          onTap: () {},
+          onTap: () => launchUrl(
+            Uri.parse('https://instagram.com/socialcall.app'),
+            mode: LaunchMode.externalApplication,
+          ),
         ),
         const SizedBox(height: 10),
         _ContactCard(
@@ -289,7 +337,10 @@ class _ContactTab extends StatelessWidget {
           subtitle: 'Tweet your issue for fast help',
           detail: '@SocialCallApp',
           color: const Color(0xFF1DA1F2),
-          onTap: () {},
+          onTap: () => launchUrl(
+            Uri.parse('https://twitter.com/SocialCallApp'),
+            mode: LaunchMode.externalApplication,
+          ),
         ),
 
         const SizedBox(height: 24),

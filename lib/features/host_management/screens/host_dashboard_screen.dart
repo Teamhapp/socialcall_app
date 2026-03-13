@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
@@ -25,6 +26,7 @@ class HostDashboardScreen extends ConsumerStatefulWidget {
 class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   Map<String, dynamic>? _host;
   List<Map<String, dynamic>> _recentCalls = [];
+  List<Map<String, dynamic>> _payouts = [];
   bool _isLoading = true;
   bool _isTogglingStatus = false;
 
@@ -42,21 +44,35 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
     _load();
   }
 
+  bool get _hasPendingPayout =>
+      _payouts.any((p) => p['status'] == 'pending');
+
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final hostResp = await ApiClient.dio.get(ApiEndpoints.hostDashboard);
-      final callsResp = await ApiClient.dio.get(
-        ApiEndpoints.callHistoryHost,
-        queryParameters: {'limit': 10},
-      );
+      final results = await Future.wait([
+        ApiClient.dio.get(ApiEndpoints.hostDashboard),
+        ApiClient.dio.get(ApiEndpoints.callHistoryHost,
+            queryParameters: {'limit': 10}),
+        ApiClient.dio
+            .get(ApiEndpoints.hostPayouts)
+            .catchError((_) => null),
+      ]);
+
       if (mounted) {
         setState(() {
-          _host = ApiClient.parseData(hostResp) as Map<String, dynamic>?;
-          final rawCalls = ApiClient.parseData(callsResp);
+          _host =
+              ApiClient.parseData(results[0]) as Map<String, dynamic>?;
+          final rawCalls = ApiClient.parseData(results[1]);
           _recentCalls = (rawCalls as List<dynamic>?)
                   ?.cast<Map<String, dynamic>>() ??
               [];
+          if (results[2] != null) {
+            final rawPayouts = ApiClient.parseData(results[2]);
+            _payouts = (rawPayouts as List<dynamic>?)
+                    ?.cast<Map<String, dynamic>>() ??
+                [];
+          }
           _isLoading = false;
         });
       }
@@ -408,23 +424,40 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: () => _showPayoutDialog(),
+                              onPressed: _hasPendingPayout
+                                  ? null
+                                  : () => _showPayoutDialog(),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white24,
+                                backgroundColor: _hasPendingPayout
+                                    ? Colors.white12
+                                    : Colors.white24,
                                 foregroundColor: Colors.white,
+                                disabledForegroundColor:
+                                    Colors.white54,
+                                disabledBackgroundColor:
+                                    Colors.white12,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 14, vertical: 10),
                               ),
-                              icon: const Icon(Icons.upload_rounded,
-                                  size: 16),
-                              label: const Text('Payout',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w600)),
+                              icon: Icon(
+                                _hasPendingPayout
+                                    ? Icons.hourglass_top_rounded
+                                    : Icons.upload_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                _hasPendingPayout
+                                    ? 'Pending'
+                                    : 'Payout',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w600),
+                              ),
                             ),
                           ],
                         ),
@@ -468,6 +501,17 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                     kycStatus: _host?['kyc_status'] as String? ?? 'not_submitted',
                   ),
 
+                  // ── Payout History ────────────────────────────────────
+                  if (_payouts.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Text('Payout History',
+                        style: AppTextStyles.headingSmall),
+                    const SizedBox(height: 10),
+                    ..._payouts.take(5).map(
+                          (p) => _PayoutHistoryTile(payout: p),
+                        ),
+                  ],
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -477,61 +521,33 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
 
   void _showPayoutDialog() {
     final pendingAmount = _d(_host?['pending_earnings']);
+    final isVerified = _host?['is_verified'] as bool? ?? false;
+    final kycStatus = _host?['kyc_status'] as String? ?? 'not_submitted';
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Request Payout', style: AppTextStyles.headingSmall),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Pending: ₹${pendingAmount.toStringAsFixed(2)}',
-              style: AppTextStyles.headingMedium
-                  .copyWith(color: AppColors.primary),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Payouts are processed within 3–5 business days. Minimum payout: ₹500.',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                final resp = await ApiClient.dio
-                    .post(ApiEndpoints.hostPayout);
-                final msg =
-                    (resp.data as Map<String, dynamic>)['message']
-                        as String? ??
-                    'Payout request submitted!';
-                if (mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(msg)));
-                }
-                await _load(); // refresh earnings display
-              } on DioException catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(ApiClient.errorMessage(e))),
-                  );
-                }
-              }
-            },
-            child: const Text('Request'),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _PayoutBottomSheet(
+        pendingAmount: pendingAmount,
+        isVerified: isVerified,
+        kycStatus: kycStatus,
+        onSubmit: (method, details) async {
+          final resp = await ApiClient.dio.post(
+            ApiEndpoints.hostPayout,
+            data: {'paymentMethod': method, 'paymentDetails': details},
+          );
+          final msg = (resp.data as Map<String, dynamic>)['message'] as String? ??
+              'Payout request submitted!';
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(msg)));
+          }
+          await _load();
+        },
       ),
     );
   }
@@ -730,6 +746,459 @@ class _HostCallTile extends StatelessWidget {
                       fontSize: 10,
                       color: AppColors.textHint,
                       fontFamily: 'Poppins')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Payout Bottom Sheet ───────────────────────────────────────────────────────
+
+class _PayoutBottomSheet extends StatefulWidget {
+  final double pendingAmount;
+  final bool isVerified;
+  final String kycStatus;
+  final Future<void> Function(String method, Map<String, String> details) onSubmit;
+
+  const _PayoutBottomSheet({
+    required this.pendingAmount,
+    required this.isVerified,
+    required this.kycStatus,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_PayoutBottomSheet> createState() => _PayoutBottomSheetState();
+}
+
+class _PayoutBottomSheetState extends State<_PayoutBottomSheet> {
+  String _method = 'upi';
+  final _upiCtrl = TextEditingController();
+  final _accountCtrl = TextEditingController();
+  final _ifscCtrl = TextEditingController();
+  final _holderCtrl = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _upiCtrl.dispose();
+    _accountCtrl.dispose();
+    _ifscCtrl.dispose();
+    _holderCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    Map<String, String> details;
+    if (_method == 'upi') {
+      final upi = _upiCtrl.text.trim();
+      if (upi.isEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Please enter your UPI ID')));
+        return;
+      }
+      details = {'upiId': upi};
+    } else {
+      final acc = _accountCtrl.text.trim();
+      final ifsc = _ifscCtrl.text.trim().toUpperCase();
+      final holder = _holderCtrl.text.trim();
+      if (acc.isEmpty || ifsc.isEmpty || holder.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please fill all bank details')));
+        return;
+      }
+      details = {'accountNumber': acc, 'ifsc': ifsc, 'accountHolder': holder};
+    }
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.onSubmit(_method, details);
+      if (mounted) Navigator.pop(context);
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(ApiClient.errorMessage(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Request Payout', style: AppTextStyles.headingMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Pending balance: ₹${widget.pendingAmount.toStringAsFixed(2)}',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary),
+          ),
+          const SizedBox(height: 20),
+
+          // ── KYC not verified ──────────────────────────────────────────────
+          if (!widget.isVerified) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.callRed.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.callRed.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_rounded,
+                      color: AppColors.callRed, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('KYC Required',
+                            style: AppTextStyles.labelLarge
+                                .copyWith(color: AppColors.callRed)),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.kycStatus == 'pending'
+                              ? 'Your KYC is under review. Payouts unlock once approved.'
+                              : 'Complete KYC verification to unlock payouts.',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            GradientButton(
+              label: widget.kycStatus == 'pending'
+                  ? 'Check KYC Status'
+                  : 'Complete KYC',
+              height: 50,
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/kyc');
+              },
+            ),
+
+          // ── Balance too low ───────────────────────────────────────────────
+          ] else if (widget.pendingAmount < 500) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_rounded,
+                      color: AppColors.warning, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Minimum payout is ₹500. Keep earning to unlock withdrawal!',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── Payout form ───────────────────────────────────────────────────
+          ] else ...[
+            // Payment method selector
+            Text('Payment Method', style: AppTextStyles.caption),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _MethodChip(
+                  label: 'UPI',
+                  icon: Icons.account_balance_wallet_rounded,
+                  selected: _method == 'upi',
+                  onTap: () => setState(() => _method = 'upi'),
+                ),
+                const SizedBox(width: 10),
+                _MethodChip(
+                  label: 'Bank Transfer',
+                  icon: Icons.account_balance_rounded,
+                  selected: _method == 'bank',
+                  onTap: () => setState(() => _method = 'bank'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // UPI fields
+            if (_method == 'upi') ...[
+              Text('UPI ID', style: AppTextStyles.caption),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _upiCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: AppTextStyles.bodyLarge,
+                decoration: const InputDecoration(
+                  hintText: 'yourname@upi',
+                  prefixIcon:
+                      Icon(Icons.alternate_email_rounded, size: 18),
+                ),
+              ),
+            ],
+
+            // Bank fields
+            if (_method == 'bank') ...[
+              Text('Account Holder Name', style: AppTextStyles.caption),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _holderCtrl,
+                style: AppTextStyles.bodyLarge,
+                textCapitalization: TextCapitalization.words,
+                decoration:
+                    const InputDecoration(hintText: 'Full name as per bank'),
+              ),
+              const SizedBox(height: 12),
+              Text('Account Number', style: AppTextStyles.caption),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _accountCtrl,
+                keyboardType: TextInputType.number,
+                style: AppTextStyles.bodyLarge,
+                decoration:
+                    const InputDecoration(hintText: 'Enter account number'),
+              ),
+              const SizedBox(height: 12),
+              Text('IFSC Code', style: AppTextStyles.caption),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _ifscCtrl,
+                style: AppTextStyles.bodyLarge,
+                textCapitalization: TextCapitalization.characters,
+                decoration:
+                    const InputDecoration(hintText: 'e.g. SBIN0001234'),
+              ),
+            ],
+
+            const SizedBox(height: 8),
+            Text('Processed within 3–5 business days.',
+                style: AppTextStyles.caption),
+            const SizedBox(height: 20),
+            GradientButton(
+              label:
+                  'Request ₹${widget.pendingAmount.toStringAsFixed(2)}',
+              height: 50,
+              isLoading: _isSubmitting,
+              onTap: _submit,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MethodChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MethodChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withOpacity(0.12)
+              : AppColors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: selected
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                fontWeight:
+                    selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Payout History Tile ───────────────────────────────────────────────────────
+
+class _PayoutHistoryTile extends StatelessWidget {
+  final Map<String, dynamic> payout;
+  const _PayoutHistoryTile({required this.payout});
+
+  static double _d(dynamic v) {
+    if (v == null) return 0.0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0.0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = payout['status'] as String? ?? 'pending';
+    final amount = _d(payout['amount']);
+    final requestedAt = payout['requested_at'] != null
+        ? DateTime.tryParse(payout['requested_at'] as String)
+        : null;
+    final processedAt = payout['processed_at'] != null
+        ? DateTime.tryParse(payout['processed_at'] as String)
+        : null;
+    final refId = payout['reference_id'] as String?;
+
+    // Parse payment method from notes JSON string
+    String paymentLabel = '';
+    try {
+      final raw = payout['notes'];
+      final notes = raw is String
+          ? jsonDecode(raw) as Map<String, dynamic>
+          : (raw as Map<String, dynamic>? ?? {});
+      if (notes['paymentMethod'] == 'upi') {
+        paymentLabel = notes['upiId'] as String? ?? 'UPI';
+      } else if (notes['paymentMethod'] == 'bank') {
+        paymentLabel = notes['accountNumber'] as String? ?? 'Bank';
+      }
+    } catch (_) {}
+
+    Color statusColor;
+    IconData statusIcon;
+    switch (status) {
+      case 'approved':
+        statusColor = AppColors.callGreen;
+        statusIcon = Icons.check_circle_rounded;
+      case 'rejected':
+        statusColor = AppColors.callRed;
+        statusIcon = Icons.cancel_rounded;
+      default:
+        statusColor = AppColors.warning;
+        statusIcon = Icons.hourglass_top_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(statusIcon, color: statusColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '₹${amount.toStringAsFixed(2)}',
+                  style: AppTextStyles.labelLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  paymentLabel.isNotEmpty ? paymentLabel : 'Payout',
+                  style: AppTextStyles.caption,
+                ),
+                if (requestedAt != null)
+                  Text(
+                    'Requested ${DateFormat('dd MMM yyyy').format(requestedAt)}',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textHint),
+                  ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  status[0].toUpperCase() + status.substring(1),
+                  style: AppTextStyles.caption.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (refId != null && refId.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Ref: $refId',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint),
+                ),
+              ] else if (processedAt != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('dd MMM').format(processedAt),
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.textHint),
+                ),
+              ],
             ],
           ),
         ],

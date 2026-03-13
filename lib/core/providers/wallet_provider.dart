@@ -50,8 +50,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
       final profileResp = await ApiClient.dio.get(ApiEndpoints.profile);
       final profileData =
           ApiClient.parseData(profileResp) as Map<String, dynamic>;
-      final balance =
-          (profileData['wallet_balance'] as num?)?.toDouble() ?? 0.0;
+      // wallet_balance is a PostgreSQL DECIMAL — arrives as String from node-postgres
+      final rawBal = profileData['wallet_balance'];
+      final balance = rawBal == null
+          ? 0.0
+          : (rawBal is num ? rawBal.toDouble() : double.tryParse(rawBal.toString()) ?? 0.0);
 
       state = WalletState(
         balance: balance,

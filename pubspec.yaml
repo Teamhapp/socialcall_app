@@ -1,7 +1,7 @@
 name: socialcall
 description: Social Interaction Platform
 publish_to: 'none'
-version: 1.1.2+4
+version: 1.1.5+7
 
 environment:
   sdk: ^3.10.4
@@ -66,6 +66,9 @@ dependencies:
 
   # Country code
   country_code_picker: ^3.0.0
+
+  # Deep links (WhatsApp, Email, web URLs)
+  url_launcher: ^6.2.6
 
 dev_dependencies:
   flutter_test:
