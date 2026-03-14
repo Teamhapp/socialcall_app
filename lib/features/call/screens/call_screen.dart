@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -33,7 +34,7 @@ class CallScreen extends ConsumerStatefulWidget {
 }
 
 class _CallScreenState extends ConsumerState<CallScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // ── UI state ─────────────────────────────────────────────────────────────────
   bool _isMuted       = false;
   bool _isSpeakerOn   = true;
@@ -87,6 +88,12 @@ class _CallScreenState extends ConsumerState<CallScreen>
   void initState() {
     super.initState();
 
+    // Register lifecycle observer so we can handle background → foreground.
+    WidgetsBinding.instance.addObserver(this);
+
+    // Keep screen on during call (WAKE_LOCK permission required in manifest).
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
     // Snapshot wallet balance at call start for depletion checks.
     _initialWalletBalance =
         ref.read(authProvider).user?.walletBalance ?? 0.0;
@@ -103,6 +110,22 @@ class _CallScreenState extends ConsumerState<CallScreen>
     _ringTimer = Timer(const Duration(seconds: 45), _onRingingTimeout);
 
     _initWebRTC();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // App came back to foreground — make sure socket is live.
+      if (!SocketService.isConnected) {
+        SocketService.connect();
+      }
+      // Restore immersive mode (Android notification bar dismissal resets it).
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else if (state == AppLifecycleState.paused) {
+      // App went to background — foreground service keeps process alive,
+      // but restore normal UI mode so status bar shows in other apps.
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   @override
@@ -124,6 +147,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
       SocketService.off('wallet_low_warning', _walletWarnCb);
     }
     _webrtc.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    // Restore normal UI mode after leaving the call screen.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 

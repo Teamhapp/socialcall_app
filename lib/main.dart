@@ -14,6 +14,7 @@ import 'core/widgets/incoming_call_overlay.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await CallNotificationService.init();
+  SocketService.initLifecycle(); // reconnect socket on app resume
   // Init Firebase + FCM (graceful — won't crash if google-services.json missing)
   await FirebaseService.init();
   SystemChrome.setPreferredOrientations([

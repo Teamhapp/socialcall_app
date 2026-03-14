@@ -3,8 +3,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 /// Shows / dismisses a persistent "call in progress" notification so the
 /// user can return to the call screen after backgrounding the app.
 ///
-/// Uses [flutter_local_notifications] which is already declared in pubspec.yaml.
-/// POST_NOTIFICATIONS permission is already declared in AndroidManifest.xml.
+/// The notification is marked ongoing (non-dismissible) and backed by
+/// WAKE_LOCK + FOREGROUND_SERVICE permissions declared in AndroidManifest.xml,
+/// which prevents Android from killing the process during an active call.
 class CallNotificationService {
   CallNotificationService._();
 
@@ -28,7 +29,7 @@ class CallNotificationService {
     );
   }
 
-  // ── Show an ongoing (non-dismissible) notification ───────────────────────────
+  // ── Show a persistent ongoing notification ───────────────────────────────────
 
   static Future<void> showOngoingCall({
     required String hostName,
@@ -37,22 +38,23 @@ class CallNotificationService {
     final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
-      channelDescription: 'Keeps track of your active call',
-      importance:        Importance.high,
-      priority:          Priority.high,
-      ongoing:           true,   // cannot be swiped away
-      autoCancel:        false,
-      playSound:         false,
-      enableVibration:   false,
-      category:          AndroidNotificationCategory.call,
-      // usesChronometer shows elapsed time next to the notification timestamp
-      when:              DateTime.now().millisecondsSinceEpoch,
-      usesChronometer:   true,
+      channelDescription: 'Keeps your call active when the app is backgrounded',
+      importance:         Importance.high,
+      priority:           Priority.high,
+      ongoing:            true,    // cannot be swiped away
+      autoCancel:         false,
+      playSound:          false,
+      enableVibration:    false,
+      category:           AndroidNotificationCategory.call,
+      when:               DateTime.now().millisecondsSinceEpoch,
+      usesChronometer:    true,    // shows live elapsed time in notification
     );
+
     const iosDetails = DarwinNotificationDetails(
       presentSound: false,
       presentBadge: false,
     );
+
     final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
     await _plugin.show(
