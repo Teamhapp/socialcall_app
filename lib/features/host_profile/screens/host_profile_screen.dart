@@ -2,23 +2,25 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../shared/widgets/online_badge.dart';
 
-class HostProfileScreen extends StatefulWidget {
+class HostProfileScreen extends ConsumerStatefulWidget {
   final HostModel host;
   const HostProfileScreen({super.key, required this.host});
 
   @override
-  State<HostProfileScreen> createState() => _HostProfileScreenState();
+  ConsumerState<HostProfileScreen> createState() => _HostProfileScreenState();
 }
 
-class _HostProfileScreenState extends State<HostProfileScreen> {
+class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
   bool _isStartingCall = false;
   bool _isFollowing = false;
   bool _isTogglingFollow = false;
@@ -282,21 +284,55 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
 
                       const SizedBox(height: 20),
 
-                      // Message button
-                      OutlinedButton.icon(
-                        onPressed: () =>
-                            context.push('/chat/${host.id}', extra: host),
-                        icon: const Icon(Icons.chat_bubble_outline_rounded,
-                            size: 18),
-                        label: const Text('Send Message'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          side: const BorderSide(color: AppColors.primary),
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                      // Message + Gift buttons row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push(
+                                  '/chat/${host.id}',
+                                  extra: host),
+                              icon: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 18),
+                              label: const Text('Message'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(
+                                    color: AppColors.primary),
+                                minimumSize:
+                                    const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => GiftPickerSheet.show(
+                              context, ref,
+                              hostId: host.id,
+                              hostName: host.name,
+                            ),
+                            icon: const Icon(
+                                Icons.card_giftcard_rounded,
+                                size: 18),
+                            label: const Text('Gift'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.gold,
+                              side: const BorderSide(
+                                  color: AppColors.gold),
+                              minimumSize:
+                                  const Size(0, 50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 12),

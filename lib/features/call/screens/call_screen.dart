@@ -12,6 +12,7 @@ import '../../../core/services/webrtc_service.dart';
 import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../core/providers/auth_provider.dart';
 
@@ -55,12 +56,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
   /// Prevents double-ending the call (e.g. our own call_ended + backend echo).
   bool _callEndedByUs = false;
 
+  // ── Gift overlay ─────────────────────────────────────────────────────────────
+  /// Shown when the caller sends a gift during the call (host sees this).
+  String? _giftOverlayText;
+  Timer? _giftOverlayTimer;
+
   // ── WebRTC & socket callbacks ─────────────────────────────────────────────────
   final _webrtc = WebRTCService();
   MessageCallback? _callConnectedCb;
   MessageCallback? _callRejectedCb;
   MessageCallback? _callSummaryCb;
   MessageCallback? _walletWarnCb;   // server-side low-balance warning
+  MessageCallback? _giftReceivedCb; // real-time gift notification
 
   // ── Animations ───────────────────────────────────────────────────────────────
   late AnimationController _pulseController;
@@ -146,6 +153,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
     if (_walletWarnCb != null) {
       SocketService.off('wallet_low_warning', _walletWarnCb);
     }
+    if (_giftReceivedCb != null) {
+      SocketService.off('gift_received', _giftReceivedCb);
+    }
+    _giftOverlayTimer?.cancel();
     _webrtc.dispose();
     WidgetsBinding.instance.removeObserver(this);
     // Restore normal UI mode after leaving the call screen.
@@ -279,6 +290,20 @@ class _CallScreenState extends ConsumerState<CallScreen>
       }
     };
     SocketService.on('call_summary', _callSummaryCb!);
+
+    // ── Gift received (shown to host during live call) ─────────────────────────
+    _giftReceivedCb = (data) {
+      final emoji  = (data['gift'] as Map?)?['emoji'] as String? ?? '🎁';
+      final name   = (data['gift'] as Map?)?['name']  as String? ?? 'Gift';
+      final sender = data['senderName'] as String?    ?? 'Someone';
+      if (!mounted) return;
+      _giftOverlayTimer?.cancel();
+      setState(() => _giftOverlayText = '$emoji $name from $sender!');
+      _giftOverlayTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _giftOverlayText = null);
+      });
+    };
+    SocketService.on('gift_received', _giftReceivedCb!);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -585,6 +610,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
             widget.isVideo ? _buildVideoUI() : _buildAudioUI(),
             // Low-balance warning banner (floats above everything).
             if (_lowBalance) _buildLowBalanceBanner(),
+            // Gift received floating toast (host sees this during call).
+            if (_giftOverlayText != null) _buildGiftToast(),
           ],
         ),
       ),
@@ -621,6 +648,44 @@ class _CallScreenState extends ConsumerState<CallScreen>
       ),
     );
     if (end == true) _endCall();
+  }
+
+  // ── Gift received toast ───────────────────────────────────────────────────
+
+  Widget _buildGiftToast() {
+    return Positioned(
+      bottom: 120, left: 0, right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          opacity: _giftOverlayText != null ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.gold.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Text(
+              _giftOverlayText ?? '',
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontFamily: 'Poppins',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Low-balance banner ────────────────────────────────────────────────────
@@ -757,7 +822,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
                 Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 40),
+                      const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -794,6 +859,17 @@ class _CallScreenState extends ConsumerState<CallScreen>
                               _isFrontCamera = !_isFrontCamera);
                         },
                       ),
+                      if (widget.isCaller)
+                        _ControlButton(
+                          icon: Icons.card_giftcard_rounded,
+                          label: 'Gift',
+                          isActive: false,
+                          onTap: () => GiftPickerSheet.show(
+                            context, ref,
+                            hostId: widget.host.id,
+                            hostName: widget.host.name,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -942,7 +1018,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
             Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 40),
+                  const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -969,6 +1045,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
                           () => _isSpeakerOn = !_isSpeakerOn);
                     },
                   ),
+                  // Gift button — only callers send gifts to the host
+                  if (widget.isCaller)
+                    _ControlButton(
+                      icon: Icons.card_giftcard_rounded,
+                      label: 'Gift',
+                      isActive: false,
+                      onTap: () => GiftPickerSheet.show(
+                        context, ref,
+                        hostId: widget.host.id,
+                        hostName: widget.host.name,
+                      ),
+                    ),
                 ],
               ),
             ),
