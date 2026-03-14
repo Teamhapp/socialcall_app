@@ -107,7 +107,7 @@ class _FollowingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.go('/host/${host.id}', extra: host),
+      onTap: () => context.push('/host/${host.id}', extra: host),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -194,7 +194,7 @@ class _FollowingTile extends StatelessWidget {
                 const SizedBox(height: 6),
                 GestureDetector(
                   onTap: host.isOnline
-                      ? () => context.go('/host/${host.id}', extra: host)
+                      ? () => context.push('/host/${host.id}', extra: host)
                       : null,
                   child: Container(
                     padding: const EdgeInsets.symmetric(

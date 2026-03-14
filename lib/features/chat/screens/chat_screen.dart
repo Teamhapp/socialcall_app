@@ -165,7 +165,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final data = ApiClient.parseData(resp) as Map<String, dynamic>;
       final callId = data['callId'] as String;
       if (mounted) {
-        context.go('/call', extra: {
+        context.push('/call', extra: {
           'host': widget.host,
           'isVideo': isVideo,
           'callId': callId,
@@ -224,7 +224,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
         title: GestureDetector(
           onTap: () =>
-              context.go('/host/${widget.host.id}', extra: widget.host),
+              context.push('/host/${widget.host.id}', extra: widget.host),
           child: Row(
             children: [
               CircleAvatar(

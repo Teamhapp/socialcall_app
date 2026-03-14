@@ -84,7 +84,7 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
 
       // Build caller representation from IncomingCallState — backend accept
       // response only returns {callId, channelName}, not host/caller info.
-      AppRouter.router.go('/call', extra: {
+      AppRouter.router.push('/call', extra: {
         'host': _callerAsHost(cs),
         'isVideo': cs.isVideo,
         'callId': cs.callId,

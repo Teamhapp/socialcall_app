@@ -473,7 +473,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                       Text('Recent Calls', style: AppTextStyles.headingSmall),
                       const Spacer(),
                       TextButton(
-                        onPressed: () => context.go('/call-history'),
+                        onPressed: () => context.push('/call-history'),
                         child: const Text('View All'),
                       ),
                     ],

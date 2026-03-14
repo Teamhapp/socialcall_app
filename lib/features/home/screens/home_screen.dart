@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _navIndex = 0;
   final _searchController = TextEditingController();
   final _categories = ['All', 'Online', 'Hindi', 'English', 'Tamil', 'Telugu'];
+  DateTime? _lastBackPress;
 
   // Incoming-call handling is now done globally in _AppShell (main.dart) via
   // IncomingCallOverlay, so no per-screen listener is needed here.
@@ -41,7 +43,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final hostsState = ref.watch(hostsProvider);
     final hostsNotifier = ref.read(hostsProvider.notifier);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // If not on the Discover tab, go back to it first.
+        if (_navIndex != 0) {
+          setState(() => _navIndex = 0);
+          return;
+        }
+        // Double-tap to exit.
+        final now = DateTime.now();
+        if (_lastBackPress == null ||
+            now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+          _lastBackPress = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: IndexedStack(
         index: _navIndex,
@@ -93,6 +119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
+      ), // PopScope
     );
   }
 }
@@ -147,7 +174,7 @@ class _DiscoveryTab extends StatelessWidget {
                       const Spacer(),
                       // Wallet balance chip
                       GestureDetector(
-                        onTap: () => context.go('/wallet'),
+                        onTap: () => context.push('/wallet'),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
@@ -467,7 +494,7 @@ class _ChatListTabState extends State<_ChatListTab> {
                               style: AppTextStyles.caption,
                             )
                           : null,
-                      onTap: () => context.go(
+                      onTap: () => context.push(
                           '/chat/$otherUserId',
                           extra: fakeHost),
                     );
@@ -656,36 +683,36 @@ List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) {
         icon: Icons.dashboard_rounded,
         label: 'Host Dashboard',
         subtitle: 'Earnings, calls & online status',
-        onTap: () => context.go('/host-dashboard'),
+        onTap: () => context.push('/host-dashboard'),
       )
     else
       _MenuItem(
         icon: Icons.headset_mic_rounded,
         label: 'Become a Host',
         subtitle: 'Earn by taking calls',
-        onTap: () => context.go('/become-host'),
+        onTap: () => context.push('/become-host'),
       ),
 
     // ── Common ─────────────────────────────────────────────────────────────
     _MenuItem(
       icon: Icons.history_rounded,
       label: 'Call History',
-      onTap: () => context.go('/call-history'),
+      onTap: () => context.push('/call-history'),
     ),
     _MenuItem(
       icon: Icons.favorite_rounded,
       label: 'Following',
-      onTap: () => context.go('/following'),
+      onTap: () => context.push('/following'),
     ),
     _MenuItem(
       icon: Icons.support_agent_rounded,
       label: 'Support',
-      onTap: () => context.go('/help'),
+      onTap: () => context.push('/help'),
     ),
     _MenuItem(
       icon: Icons.settings_rounded,
       label: 'Settings',
-      onTap: () => context.go('/settings'),
+      onTap: () => context.push('/settings'),
     ),
     _MenuItem(
       icon: Icons.logout_rounded,

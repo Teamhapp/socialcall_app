@@ -12,7 +12,7 @@ class HostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.go('/host/${host.id}', extra: host),
+      onTap: () => context.push('/host/${host.id}', extra: host),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -129,8 +129,7 @@ class HostCard extends StatelessWidget {
             Positioned(
               right: 8, bottom: 48,
               child: GestureDetector(
-                onTap: () => context.go('/call',
-                    extra: {'host': host, 'isVideo': false}),
+                onTap: () => context.push('/host/${host.id}', extra: host),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: const BoxDecoration(

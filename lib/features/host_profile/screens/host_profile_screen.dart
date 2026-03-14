@@ -78,7 +78,7 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
       final callId = data['callId'] as String;
 
       if (mounted) {
-        context.go('/call', extra: {
+        context.push('/call', extra: {
           'host': widget.host,
           'isVideo': isVideo,
           'callId': callId,
@@ -286,7 +286,7 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
                       // Message button
                       OutlinedButton.icon(
                         onPressed: () =>
-                            context.go('/chat/${host.id}', extra: host),
+                            context.push('/chat/${host.id}', extra: host),
                         icon: const Icon(Icons.chat_bubble_outline_rounded,
                             size: 18),
                         label: const Text('Send Message'),

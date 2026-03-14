@@ -592,7 +592,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                               style: AppTextStyles.headingSmall),
                           const Spacer(),
                           TextButton(
-                            onPressed: () => context.go('/call-history'),
+                            onPressed: () => context.push('/call-history'),
                             child: const Text('View All'),
                           ),
                         ],
