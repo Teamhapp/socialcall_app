@@ -98,10 +98,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
       setState(() {
         _host = {..._host!, 'is_online': newStatus};
       });
-      // Emit socket event so home screen updates in real time
-      if (newStatus) {
-        SocketService.emit('host_went_online', {});
-      }
+      // Backend broadcasts host_online/host_offline automatically on socket connect/disconnect
+      // and via the PATCH /status REST call — no extra socket emit needed here.
     } on DioException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

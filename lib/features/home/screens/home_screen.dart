@@ -43,6 +43,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final hostsState = ref.watch(hostsProvider);
     final hostsNotifier = ref.read(hostsProvider.notifier);
 
+    // Show snackbar when a followed host comes online
+    ref.listen<HostsState>(hostsProvider, (prev, next) {
+      final msg = next.followedHostOnlineMessage;
+      if (msg != null && msg != prev?.followedHostOnlineMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            duration: const Duration(seconds: 4),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() => _navIndex = 0);
+                hostsNotifier.setFilter('Online');
+              },
+            ),
+          ),
+        );
+        hostsNotifier.clearFollowedHostOnlineMessage();
+      }
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

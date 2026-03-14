@@ -21,11 +21,11 @@ class TransactionModel {
     // Map backend enum values (call_charge, gift_sent, etc.) to Flutter enum
     final rawType = (json['type'] as String?) ?? 'recharge';
     final type = switch (rawType) {
-      'recharge'                      => TransactionType.recharge,
-      'call_charge'                   => TransactionType.call,
-      'gift_sent' || 'gift_received'  => TransactionType.gift,
-      'payout'                        => TransactionType.payout,
-      _                               => TransactionType.recharge,
+      'recharge' || 'promo_credit' || 'admin_bonus' => TransactionType.recharge,
+      'call_charge'                                  => TransactionType.call,
+      'gift_sent' || 'gift_received'                 => TransactionType.gift,
+      'payout'                                       => TransactionType.payout,
+      _                                              => TransactionType.recharge,
     };
     // amount is a PostgreSQL DECIMAL — arrives as String from node-postgres
     final rawAmount = json['amount'];

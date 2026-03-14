@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
+import '../router/app_router.dart';
 
 // ─── Background message handler (top-level, outside any class) ───────────────
 @pragma('vm:entry-point')
@@ -218,12 +219,20 @@ class FirebaseService {
   // ── Handle notification tap ───────────────────────────────────────────────
   static void _handleNotificationOpen(RemoteMessage message) {
     debugPrint('[FCM] Notification opened: ${message.data}');
-    // Navigation is handled by IncomingCallOverlay / socket events
-    // The call data is already pushed via Socket.IO when the host comes online
+    final type = message.data['type'];
+    if (type == 'host_online') {
+      // Navigate to home / discover tab so user can call the host
+      AppRouter.router.go('/home');
+    }
+    // For 'call' type: IncomingCallOverlay / socket events handle it
   }
 
   static void _onLocalNotifTap(NotificationResponse response) {
     debugPrint('[FCM] Local notification tapped: ${response.payload}');
+    final payload = response.payload ?? '';
+    if (payload.contains('type=host_online')) {
+      AppRouter.router.go('/home');
+    }
   }
 
   // ── Delete token on logout ────────────────────────────────────────────────

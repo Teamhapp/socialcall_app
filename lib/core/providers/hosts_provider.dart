@@ -13,6 +13,8 @@ class HostsState {
   final bool hasMore;
   final String search;
   final String filter; // All / Online / language
+  // Non-null when a followed host just came online — UI shows a snackbar then clears it.
+  final String? followedHostOnlineMessage;
 
   const HostsState({
     this.hosts = const [],
@@ -22,6 +24,7 @@ class HostsState {
     this.hasMore = true,
     this.search = '',
     this.filter = 'All',
+    this.followedHostOnlineMessage,
   });
 
   HostsState copyWith({
@@ -32,6 +35,8 @@ class HostsState {
     bool? hasMore,
     String? search,
     String? filter,
+    String? followedHostOnlineMessage,
+    bool clearHostOnlineMessage = false,
   }) =>
       HostsState(
         hosts: hosts ?? this.hosts,
@@ -41,6 +46,9 @@ class HostsState {
         hasMore: hasMore ?? this.hasMore,
         search: search ?? this.search,
         filter: filter ?? this.filter,
+        followedHostOnlineMessage: clearHostOnlineMessage
+            ? null
+            : followedHostOnlineMessage ?? this.followedHostOnlineMessage,
       );
 }
 
@@ -56,6 +64,7 @@ class HostsNotifier extends StateNotifier<HostsState> {
     SocketService.on('host_status_changed', _onStatusChanged);
     SocketService.on('host_online', _onHostOnline);
     SocketService.on('host_offline', _onHostOffline);
+    SocketService.on('followed_host_online', _onFollowedHostOnline);
   }
 
   void _onStatusChanged(Map<String, dynamic> data) {
@@ -73,6 +82,18 @@ class HostsNotifier extends StateNotifier<HostsState> {
   void _onHostOffline(Map<String, dynamic> data) {
     final userId = data['userId']?.toString();
     if (userId != null) _updateHostOnlineStatus(userId, false);
+  }
+
+  void _onFollowedHostOnline(Map<String, dynamic> data) {
+    final name = data['hostName'] as String? ?? 'A host';
+    state = state.copyWith(
+      followedHostOnlineMessage: '💜 $name is now online! Tap to call.',
+    );
+  }
+
+  /// Call this after the UI has shown the snackbar to clear the message.
+  void clearFollowedHostOnlineMessage() {
+    state = state.copyWith(clearHostOnlineMessage: true);
   }
 
   void _updateHostOnlineStatus(String userId, bool isOnline) {
@@ -96,6 +117,7 @@ class HostsNotifier extends StateNotifier<HostsState> {
     SocketService.off('host_status_changed', _onStatusChanged);
     SocketService.off('host_online', _onHostOnline);
     SocketService.off('host_offline', _onHostOffline);
+    SocketService.off('followed_host_online', _onFollowedHostOnline);
     super.dispose();
   }
 
