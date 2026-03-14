@@ -8,7 +8,6 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/host_model.dart';
-import '../../../shared/widgets/gradient_button.dart';
 import '../../../shared/widgets/online_badge.dart';
 
 class HostProfileScreen extends StatefulWidget {
@@ -302,12 +301,33 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
 
                       const SizedBox(height: 12),
 
-                      GradientButton(
-                        label:
-                            'Audio Call  ₹${host.audioRatePerMin.toInt()}/min',
-                        icon: const Icon(Icons.call_rounded,
-                            color: Colors.white, size: 18),
-                        onTap: () => _startCall(false),
+                      // Audio + Video call buttons side by side
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _CallActionButton(
+                              icon: Icons.call_rounded,
+                              label: 'Audio Call',
+                              price: '₹${host.audioRatePerMin.toInt()}/min',
+                              color: AppColors.callGreen,
+                              onTap: _isStartingCall
+                                  ? null
+                                  : () => _startCall(false),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _CallActionButton(
+                              icon: Icons.videocam_rounded,
+                              label: 'Video Call',
+                              price: '₹${host.videoRatePerMin.toInt()}/min',
+                              color: AppColors.primary,
+                              onTap: _isStartingCall
+                                  ? null
+                                  : () => _startCall(true),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -335,6 +355,69 @@ class _HostProfileScreenState extends State<HostProfileScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Bottom call action button ─────────────────────────────────────────────────
+
+class _CallActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String price;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _CallActionButton({
+    required this.icon,
+    required this.label,
+    required this.price,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          gradient: active
+              ? LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.75)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: active ? null : AppColors.border,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : null,
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(height: 4),
+            Text(label,
+                style: AppTextStyles.caption.copyWith(color: Colors.white)),
+            Text(price,
+                style: AppTextStyles.caption.copyWith(
+                  color: Colors.white70,
+                  fontSize: 10,
+                )),
+          ],
+        ),
       ),
     );
   }

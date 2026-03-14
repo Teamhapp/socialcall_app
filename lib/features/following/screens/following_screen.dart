@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:go_router/go_router.dart';
@@ -18,11 +19,44 @@ class FollowingScreen extends StatefulWidget {
 class _FollowingScreenState extends State<FollowingScreen> {
   List<HostModel> _hosts = [];
   bool _isLoading = true;
+  String? _callingHostId; // tracks which host is being called
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _startCall(HostModel host, bool isVideo) async {
+    if (_callingHostId != null) return;
+    setState(() => _callingHostId = host.id);
+    try {
+      final resp = await ApiClient.dio.post(
+        ApiEndpoints.callInitiate,
+        data: {'hostId': host.id, 'callType': isVideo ? 'video' : 'audio'},
+      );
+      final data = ApiClient.parseData(resp) as Map<String, dynamic>;
+      final callId = data['callId'] as String;
+      if (mounted) {
+        context.push('/call', extra: {
+          'host': host,
+          'isVideo': isVideo,
+          'callId': callId,
+          'isCaller': true,
+        });
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiClient.errorMessage(e)),
+            backgroundColor: AppColors.callRed,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _callingHostId = null);
+    }
   }
 
   Future<void> _load() async {
@@ -93,7 +127,11 @@ class _FollowingScreenState extends State<FollowingScreen> {
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _hosts.length,
-                      itemBuilder: (_, i) => _FollowingTile(host: _hosts[i]),
+                      itemBuilder: (_, i) => _FollowingTile(
+                        host: _hosts[i],
+                        callingHostId: _callingHostId,
+                        onCall: _startCall,
+                      ),
                     ),
             ),
     );
@@ -102,7 +140,14 @@ class _FollowingScreenState extends State<FollowingScreen> {
 
 class _FollowingTile extends StatelessWidget {
   final HostModel host;
-  const _FollowingTile({required this.host});
+  final String? callingHostId;
+  final void Function(HostModel, bool) onCall;
+
+  const _FollowingTile({
+    required this.host,
+    required this.callingHostId,
+    required this.onCall,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -182,44 +227,96 @@ class _FollowingTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Rate + call button
+            // Call buttons column
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '₹${host.audioRatePerMin.toInt()}/min',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: host.isOnline
-                      ? () => context.push('/host/${host.id}', extra: host)
-                      : null,
-                  child: Container(
+                if (!host.isOnline)
+                  Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      gradient: host.isOnline
-                          ? AppColors.primaryGradient
-                          : null,
-                      color: host.isOnline ? null : AppColors.border,
-                      borderRadius: BorderRadius.circular(10),
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      host.isOnline ? 'Call' : 'Offline',
-                      style: AppTextStyles.caption.copyWith(
-                        color: host.isOnline
-                            ? Colors.white
-                            : AppColors.textHint,
-                        fontWeight: FontWeight.w700,
+                    child: Text('Offline',
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textHint)),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Audio call button
+                      _QuickCallBtn(
+                        icon: Icons.call_rounded,
+                        color: AppColors.callGreen,
+                        tooltip: '₹${host.audioRatePerMin.toInt()}/min',
+                        loading: callingHostId == host.id,
+                        onTap: callingHostId == null
+                            ? () => onCall(host, false)
+                            : null,
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      // Video call button
+                      _QuickCallBtn(
+                        icon: Icons.videocam_rounded,
+                        color: AppColors.primary,
+                        tooltip: '₹${host.videoRatePerMin.toInt()}/min',
+                        loading: callingHostId == host.id,
+                        onTap: callingHostId == null
+                            ? () => onCall(host, true)
+                            : null,
+                      ),
+                    ],
                   ),
-                ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Small circular call button used in list tiles ─────────────────────────────
+
+class _QuickCallBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final bool loading;
+  final VoidCallback? onTap;
+
+  const _QuickCallBtn({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.loading,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: loading
+              ? Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: color),
+                )
+              : Icon(icon, color: color, size: 18),
         ),
       ),
     );

@@ -125,29 +125,59 @@ class HostCard extends StatelessWidget {
               ),
             ),
 
-            // Quick call button
-            Positioned(
-              right: 8, bottom: 48,
-              child: GestureDetector(
-                onTap: () => context.push('/host/${host.id}', extra: host),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
+            // Quick call buttons (audio + video)
+            if (host.isOnline)
+              Positioned(
+                right: 8, bottom: 50,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Audio call
+                    GestureDetector(
+                      onTap: () =>
+                          context.push('/host/${host.id}', extra: host),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppColors.callGreen,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.callGreen.withValues(alpha: 0.6),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.call_rounded,
+                            color: Colors.white, size: 14),
                       ),
-                    ],
-                  ),
-                  child: const Icon(Icons.call_rounded,
-                      color: Colors.white, size: 16),
+                    ),
+                    const SizedBox(width: 6),
+                    // Video call
+                    GestureDetector(
+                      onTap: () =>
+                          context.push('/host/${host.id}', extra: host),
+                      child: Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.6),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.videocam_rounded,
+                            color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
           ],
         ),
       ),
