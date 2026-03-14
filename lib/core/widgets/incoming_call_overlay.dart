@@ -14,8 +14,8 @@ import '../../models/host_model.dart';
 // Helper: build a minimal HostModel from caller info in IncomingCallState.
 // CallScreen requires a HostModel for the "other party" regardless of direction.
 HostModel _callerAsHost(IncomingCallState cs) => HostModel(
-      id: cs.callId ?? '',
-      userId: cs.callId ?? '',
+      id: cs.callerId ?? cs.callId ?? '',
+      userId: cs.callerId ?? cs.callId ?? '',
       name: cs.callerName,
       avatar: cs.callerAvatar,
       bio: '',

@@ -8,6 +8,7 @@ import '../socket/socket_service.dart';
 
 class IncomingCallState {
   final String? callId;
+  final String? callerId;   // the caller's user ID (used to build the HostModel on the call screen)
   final String callerName;
   final String? callerAvatar;
   final bool isVideo;
@@ -15,6 +16,7 @@ class IncomingCallState {
 
   const IncomingCallState({
     this.callId,
+    this.callerId,
     this.callerName = '',
     this.callerAvatar,
     this.isVideo = false,
@@ -47,11 +49,12 @@ class IncomingCallNotifier extends StateNotifier<IncomingCallState> {
       final callerMap  = data['caller']   as Map<String, dynamic>? ?? {};
 
       state = IncomingCallState(
-        callId:      callId,
-        callerName:  callerMap['name']   as String? ?? 'Unknown',
+        callId:       callId,
+        callerId:     callerMap['id']     as String?,
+        callerName:   callerMap['name']   as String? ?? 'Unknown',
         callerAvatar: callerMap['avatar'] as String?,
-        isVideo:     callType == 'video',
-        isRinging:   true,
+        isVideo:      callType == 'video',
+        isRinging:    true,
       );
 
       // Auto-dismiss as missed call after 30 s
