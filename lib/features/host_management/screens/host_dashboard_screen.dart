@@ -54,10 +54,15 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
         ApiClient.dio.get(ApiEndpoints.hostDashboard),
         ApiClient.dio.get(ApiEndpoints.callHistoryHost,
             queryParameters: {'limit': 10}),
-        ApiClient.dio
-            .get(ApiEndpoints.hostPayouts)
-            .catchError((_) => null),
       ]);
+
+      // Payouts endpoint may not be available to all hosts — fetch separately.
+      dynamic payoutsResp;
+      try {
+        payoutsResp = await ApiClient.dio.get(ApiEndpoints.hostPayouts);
+      } catch (_) {
+        payoutsResp = null;
+      }
 
       if (mounted) {
         setState(() {
@@ -67,8 +72,8 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
           _recentCalls = (rawCalls as List<dynamic>?)
                   ?.cast<Map<String, dynamic>>() ??
               [];
-          if (results[2] != null) {
-            final rawPayouts = ApiClient.parseData(results[2]);
+          if (payoutsResp != null) {
+            final rawPayouts = ApiClient.parseData(payoutsResp);
             _payouts = (rawPayouts as List<dynamic>?)
                     ?.cast<Map<String, dynamic>>() ??
                 [];

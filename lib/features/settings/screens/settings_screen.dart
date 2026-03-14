@@ -111,6 +111,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // ── Call Preferences ──────────────────────────────────────────
           _SectionHeader(title: 'Call Preferences'),
           _ToggleTile(
+            icon: Icons.phone_callback_rounded,
+            label: 'Auto-Answer Calls',
+            subtitle: 'Automatically accept incoming calls',
+            value: _autoAnswer,
+            onChanged: (v) => setState(() => _autoAnswer = v),
+          ),
+          _ToggleTile(
             icon: Icons.timer_rounded,
             label: 'Show Call Timer',
             subtitle: 'Display duration during calls',
@@ -248,6 +255,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
               Navigator.pop(context);
+              // Capture messenger before async gap to avoid
+              // use_build_context_synchronously lint.
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 await ApiClient.dio.patch(
                   ApiEndpoints.profileUpdate,
@@ -256,13 +266,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // Refresh in-memory user state
                 await ref.read(authProvider.notifier).refreshBalance();
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     const SnackBar(content: Text('Name updated!')),
                   );
                 }
               } on DioException catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(content: Text(ApiClient.errorMessage(e))),
                   );
                 }
@@ -427,13 +437,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              // Capture router/messenger before async gap.
+              final router = GoRouter.of(context);
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 await ApiClient.dio.delete(ApiEndpoints.deleteAccount);
                 await ref.read(authProvider.notifier).logout();
-                if (context.mounted) context.go('/login');
+                if (mounted) router.go('/login');
               } on DioException catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  messenger.showSnackBar(
                     SnackBar(content: Text(ApiClient.errorMessage(e))),
                   );
                 }
