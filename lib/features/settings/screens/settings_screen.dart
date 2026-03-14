@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
@@ -32,6 +33,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Privacy
   bool _showOnlineStatus = true;
   bool _allowGifts = true;
+
+  // Language
+  String _language = 'English';
+
+  static const _langs = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Bengali'];
+  static const _qualities = [
+    ('Auto', 'Best based on your network'),
+    ('HD', 'High quality, uses more data'),
+    ('Standard', 'Balanced quality & data'),
+    ('Low', 'Save data, lower quality'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _callNotifications    = p.getBool('pref_call_notif')    ?? true;
+      _messageNotifications = p.getBool('pref_msg_notif')     ?? true;
+      _giftNotifications    = p.getBool('pref_gift_notif')    ?? true;
+      _promoNotifications   = p.getBool('pref_promo_notif')   ?? false;
+      _autoAnswer           = p.getBool('pref_auto_answer')   ?? false;
+      _showCallTimer        = p.getBool('pref_call_timer')    ?? true;
+      _lowBalanceAlert      = p.getBool('pref_low_balance')   ?? true;
+      _showOnlineStatus     = p.getBool('pref_online_status') ?? true;
+      _allowGifts           = p.getBool('pref_allow_gifts')   ?? true;
+      _callQuality          = p.getString('pref_quality')     ?? 'Auto';
+      _language             = p.getString('pref_language')    ?? 'English';
+    });
+  }
+
+  Future<void> _savePref(String key, dynamic value) async {
+    final p = await SharedPreferences.getInstance();
+    if (value is bool)   await p.setBool(key, value);
+    if (value is String) await p.setString(key, value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +115,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _SettingsTile(
             icon: Icons.language_rounded,
             label: 'Language',
-            subtitle: 'English',
+            subtitle: _language,
             onTap: () => _showLanguagePicker(context),
           ),
 
@@ -84,28 +126,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Incoming Calls',
             subtitle: 'Alert when someone calls you',
             value: _callNotifications,
-            onChanged: (v) => setState(() => _callNotifications = v),
+            onChanged: (v) { setState(() => _callNotifications = v); _savePref('pref_call_notif', v); },
           ),
           _ToggleTile(
             icon: Icons.chat_bubble_rounded,
             label: 'Messages',
             subtitle: 'New message notifications',
             value: _messageNotifications,
-            onChanged: (v) => setState(() => _messageNotifications = v),
+            onChanged: (v) { setState(() => _messageNotifications = v); _savePref('pref_msg_notif', v); },
           ),
           _ToggleTile(
             icon: Icons.card_giftcard_rounded,
             label: 'Gifts',
             subtitle: 'When someone sends you a gift',
             value: _giftNotifications,
-            onChanged: (v) => setState(() => _giftNotifications = v),
+            onChanged: (v) { setState(() => _giftNotifications = v); _savePref('pref_gift_notif', v); },
           ),
           _ToggleTile(
             icon: Icons.local_offer_rounded,
             label: 'Offers & Promotions',
             subtitle: 'Wallet recharge offers',
             value: _promoNotifications,
-            onChanged: (v) => setState(() => _promoNotifications = v),
+            onChanged: (v) { setState(() => _promoNotifications = v); _savePref('pref_promo_notif', v); },
           ),
 
           // ── Call Preferences ──────────────────────────────────────────
@@ -115,21 +157,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Auto-Answer Calls',
             subtitle: 'Automatically accept incoming calls',
             value: _autoAnswer,
-            onChanged: (v) => setState(() => _autoAnswer = v),
+            onChanged: (v) { setState(() => _autoAnswer = v); _savePref('pref_auto_answer', v); },
           ),
           _ToggleTile(
             icon: Icons.timer_rounded,
             label: 'Show Call Timer',
             subtitle: 'Display duration during calls',
             value: _showCallTimer,
-            onChanged: (v) => setState(() => _showCallTimer = v),
+            onChanged: (v) { setState(() => _showCallTimer = v); _savePref('pref_call_timer', v); },
           ),
           _ToggleTile(
             icon: Icons.warning_amber_rounded,
             label: 'Low Balance Alert',
             subtitle: 'Warn when balance < 1 minute',
             value: _lowBalanceAlert,
-            onChanged: (v) => setState(() => _lowBalanceAlert = v),
+            onChanged: (v) { setState(() => _lowBalanceAlert = v); _savePref('pref_low_balance', v); },
           ),
           _SettingsTile(
             icon: Icons.high_quality_rounded,
@@ -145,14 +187,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Show Online Status',
             subtitle: 'Let others see when you\'re online',
             value: _showOnlineStatus,
-            onChanged: (v) => setState(() => _showOnlineStatus = v),
+            onChanged: (v) { setState(() => _showOnlineStatus = v); _savePref('pref_online_status', v); },
           ),
           _ToggleTile(
             icon: Icons.card_giftcard_rounded,
             label: 'Allow Gifts',
             subtitle: 'Receive gifts from callers',
             value: _allowGifts,
-            onChanged: (v) => setState(() => _allowGifts = v),
+            onChanged: (v) { setState(() => _allowGifts = v); _savePref('pref_allow_gifts', v); },
           ),
           _SettingsTile(
             icon: Icons.block_rounded,
@@ -288,47 +330,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showLanguagePicker(BuildContext context) {
-    final langs = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Bengali'];
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40, height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(2),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setLocal) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border, borderRadius: BorderRadius.circular(2)),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text('Select Language', style: AppTextStyles.headingMedium),
-          const SizedBox(height: 8),
-          ...langs.map((l) => ListTile(
-            title: Text(l, style: AppTextStyles.bodyLarge),
-            trailing: l == 'English'
-                ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                : null,
-            onTap: () => Navigator.pop(context),
-          )),
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 16),
+            Text('Select Language', style: AppTextStyles.headingMedium),
+            const SizedBox(height: 8),
+            ..._langs.map((l) => ListTile(
+              title: Text(l, style: AppTextStyles.bodyLarge),
+              trailing: l == _language
+                  ? const Icon(Icons.check_rounded, color: AppColors.primary)
+                  : null,
+              onTap: () {
+                setState(() => _language = l);
+                _savePref('pref_language', l);
+                Navigator.pop(context);
+              },
+            )),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
 
   void _showQualityPicker(BuildContext context) {
-    final options = [
-      ('Auto', 'Best based on your network'),
-      ('HD', 'High quality, uses more data'),
-      ('Standard', 'Balanced quality & data'),
-      ('Low', 'Save data, lower quality'),
-    ];
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -347,7 +386,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           Text('Call Quality', style: AppTextStyles.headingMedium),
           const SizedBox(height: 8),
-          ...options.map((o) => ListTile(
+          ..._qualities.map((o) => ListTile(
             title: Text(o.$1, style: AppTextStyles.bodyLarge),
             subtitle: Text(o.$2, style: AppTextStyles.bodySmall),
             trailing: o.$1 == _callQuality
@@ -355,6 +394,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 : null,
             onTap: () {
               setState(() => _callQuality = o.$1);
+              _savePref('pref_quality', o.$1);
               Navigator.pop(context);
             },
           )),
@@ -365,22 +405,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showBlockedUsers(BuildContext context) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Blocked Users', style: AppTextStyles.headingMedium),
-        content: Text('You haven\'t blocked anyone yet.',
-            style: AppTextStyles.bodyMedium),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('OK',
-                style:
-                    AppTextStyles.labelLarge.copyWith(color: AppColors.primary)),
-          ),
-        ],
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 20),
+            Text('Blocked Users', style: AppTextStyles.headingMedium),
+            const SizedBox(height: 32),
+            Icon(Icons.block_rounded, size: 48, color: AppColors.textHint.withValues(alpha: 0.4)),
+            const SizedBox(height: 16),
+            Text('No blocked users', style: AppTextStyles.bodyLarge),
+            const SizedBox(height: 6),
+            Text(
+              'Users you block won\'t be able to call or message you.',
+              style: AppTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }

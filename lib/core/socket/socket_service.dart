@@ -57,20 +57,17 @@ class SocketService with WidgetsBindingObserver {
     );
 
     _socket!.onConnect((_) {
-      // ignore: avoid_print
-      print('[Socket] Connected — re-attaching ${_listeners.length} listener groups');
+      debugPrint('[Socket] Connected — re-attaching ${_listeners.length} listener groups');
       // Re-attach all registered Dart callbacks after reconnect.
       _reattachAll();
     });
 
     _socket!.onDisconnect((_) {
-      // ignore: avoid_print
-      print('[Socket] Disconnected');
+      debugPrint('[Socket] Disconnected');
     });
 
     _socket!.onConnectError((err) {
-      // ignore: avoid_print
-      print('[Socket] Connect error: $err');
+      debugPrint('[Socket] Connect error: $err');
     });
 
     // Initial attach for any listeners already registered before connect().
