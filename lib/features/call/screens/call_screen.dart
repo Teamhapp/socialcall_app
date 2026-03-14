@@ -566,15 +566,61 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          widget.isVideo ? _buildVideoUI() : _buildAudioUI(),
-          // Low-balance warning banner (floats above everything).
-          if (_lowBalance) _buildLowBalanceBanner(),
+    return PopScope(
+      // Intercept the hardware/gesture back button during a call.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // While the call is still ringing or connecting, back = cancel.
+        if (_status != CallStatus.connected) {
+          _endCall();
+          return;
+        }
+        // While connected, show a confirmation dialog.
+        _showEndCallConfirm();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            widget.isVideo ? _buildVideoUI() : _buildAudioUI(),
+            // Low-balance warning banner (floats above everything).
+            if (_lowBalance) _buildLowBalanceBanner(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEndCallConfirm() async {
+    final end = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('End Call?', style: AppTextStyles.headingSmall),
+        content: Text(
+          'Do you want to end the call with ${widget.host.name}?',
+          style: AppTextStyles.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Stay'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.callRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('End Call'),
+          ),
         ],
       ),
     );
+    if (end == true) _endCall();
   }
 
   // ── Low-balance banner ────────────────────────────────────────────────────
