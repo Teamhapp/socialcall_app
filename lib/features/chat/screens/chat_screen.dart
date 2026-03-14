@@ -162,8 +162,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           'callType': isVideo ? 'video' : 'audio',
         },
       );
-      final data = ApiClient.parseData(resp) as Map<String, dynamic>;
-      final callId = data['callId'] as String;
+      final data = ApiClient.parseData(resp) as Map<String, dynamic>?;
+      final callId = data?['callId']?.toString() ?? '';
+      if (callId.isEmpty) throw Exception('No callId returned');
       if (mounted) {
         context.push('/call', extra: {
           'host': widget.host,

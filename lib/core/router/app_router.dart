@@ -39,29 +39,56 @@ class AppRouter {
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(
         path: '/otp',
-        builder: (_, state) => OtpScreen(phone: state.extra as String),
+        builder: (_, state) => OtpScreen(phone: (state.extra as String?) ?? ''),
       ),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
       GoRoute(
         path: '/host/:id',
-        builder: (_, state) => HostProfileScreen(host: state.extra as HostModel),
+        builder: (_, state) {
+          final host = state.extra;
+          if (host is! HostModel) {
+            return const Scaffold(
+              body: Center(child: Text('Host data unavailable')),
+            );
+          }
+          return HostProfileScreen(host: host);
+        },
       ),
       GoRoute(
         path: '/call',
         builder: (_, state) {
-          final args = state.extra as Map<String, dynamic>;
+          final args = state.extra;
+          if (args is! Map<String, dynamic>) {
+            return const Scaffold(
+              body: Center(child: Text('Invalid call parameters')),
+            );
+          }
+          final host = args['host'];
+          if (host is! HostModel) {
+            return const Scaffold(
+              body: Center(child: Text('Invalid call parameters')),
+            );
+          }
           return CallScreen(
-            host: args['host'] as HostModel,
-            isVideo: args['isVideo'] as bool,
-            callId: args['callId'] as String,
-            isCaller: args['isCaller'] as bool,
+            host: host,
+            isVideo: args['isVideo'] as bool? ?? false,
+            callId: args['callId']?.toString() ?? '',
+            isCaller: args['isCaller'] as bool? ?? true,
           );
         },
       ),
       GoRoute(
         path: '/chat/:hostId',
-        builder: (_, state) => ChatScreen(host: state.extra as HostModel),
+        builder: (_, state) {
+          final host = state.extra;
+          if (host is! HostModel) {
+            return const Scaffold(
+              body: Center(child: Text('Host data unavailable')),
+            );
+          }
+          return ChatScreen(host: host);
+        },
       ),
       GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),

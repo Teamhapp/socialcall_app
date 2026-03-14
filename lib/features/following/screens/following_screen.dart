@@ -35,8 +35,9 @@ class _FollowingScreenState extends State<FollowingScreen> {
         ApiEndpoints.callInitiate,
         data: {'hostId': host.id, 'callType': isVideo ? 'video' : 'audio'},
       );
-      final data = ApiClient.parseData(resp) as Map<String, dynamic>;
-      final callId = data['callId'] as String;
+      final data = ApiClient.parseData(resp) as Map<String, dynamic>?;
+      final callId = data?['callId']?.toString() ?? '';
+      if (callId.isEmpty) throw Exception('No callId returned');
       if (mounted) {
         context.push('/call', extra: {
           'host': host,
