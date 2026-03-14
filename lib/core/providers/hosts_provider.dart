@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
+import '../socket/socket_service.dart';
 import '../../models/host_model.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -47,6 +48,55 @@ class HostsState {
 class HostsNotifier extends StateNotifier<HostsState> {
   HostsNotifier() : super(const HostsState()) {
     fetchHosts();
+    _listenToStatusChanges();
+  }
+
+  // Listen for real-time host online/offline events
+  void _listenToStatusChanges() {
+    SocketService.on('host_status_changed', _onStatusChanged);
+    SocketService.on('host_online', _onHostOnline);
+    SocketService.on('host_offline', _onHostOffline);
+  }
+
+  void _onStatusChanged(Map<String, dynamic> data) {
+    final userId = data['userId']?.toString();
+    final isOnline = data['isOnline'] as bool? ?? false;
+    if (userId == null) return;
+    _updateHostOnlineStatus(userId, isOnline);
+  }
+
+  void _onHostOnline(Map<String, dynamic> data) {
+    final userId = data['userId']?.toString();
+    if (userId != null) _updateHostOnlineStatus(userId, true);
+  }
+
+  void _onHostOffline(Map<String, dynamic> data) {
+    final userId = data['userId']?.toString();
+    if (userId != null) _updateHostOnlineStatus(userId, false);
+  }
+
+  void _updateHostOnlineStatus(String userId, bool isOnline) {
+    final updated = state.hosts.map((h) {
+      if (h.userId == userId) {
+        return HostModel(
+          id: h.id, userId: h.userId, name: h.name, avatar: h.avatar,
+          bio: h.bio, languages: h.languages, audioRatePerMin: h.audioRatePerMin,
+          videoRatePerMin: h.videoRatePerMin, rating: h.rating,
+          totalCalls: h.totalCalls, isOnline: isOnline,
+          isVerified: h.isVerified, followersCount: h.followersCount,
+        );
+      }
+      return h;
+    }).toList();
+    state = state.copyWith(hosts: updated);
+  }
+
+  @override
+  void dispose() {
+    SocketService.off('host_status_changed', _onStatusChanged);
+    SocketService.off('host_online', _onHostOnline);
+    SocketService.off('host_offline', _onHostOffline);
+    super.dispose();
   }
 
   Future<void> fetchHosts({bool refresh = true}) async {
