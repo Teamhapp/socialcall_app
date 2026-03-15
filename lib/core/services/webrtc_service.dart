@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../socket/socket_service.dart';
 
 /// WebRTC peer-to-peer audio/video service.
@@ -171,6 +172,24 @@ class WebRTCService {
   }
 
   Future<void> _startLocalStream() async {
+    // ── Runtime permission request (required on Android 6+ / iOS) ─────────────
+    // Declaring permissions in AndroidManifest.xml is not enough — the OS denies
+    // dangerous permissions (RECORD_AUDIO, CAMERA) unless the app explicitly asks
+    // at runtime.  Without this, getUserMedia() is silently denied and the call
+    // has no audio/video tracks → ICE fails → "Connection failed".
+    final permissionsToRequest = [
+      Permission.microphone,
+      if (_isVideo) Permission.camera,
+    ];
+
+    final statuses = await permissionsToRequest.request();
+    for (final entry in statuses.entries) {
+      debugPrint('[WebRTC] Permission ${entry.key}: ${entry.value}');
+      if (!entry.value.isGranted) {
+        throw Exception('${entry.key} permission denied — cannot start call');
+      }
+    }
+
     debugPrint('[WebRTC] Requesting getUserMedia audio=true video=$_isVideo');
     _localStream = await navigator.mediaDevices.getUserMedia({
       'audio': true,
