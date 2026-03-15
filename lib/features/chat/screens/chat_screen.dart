@@ -9,6 +9,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../models/message_model.dart';
 import '../../../shared/widgets/online_badge.dart';
@@ -47,8 +48,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _loadHistory() async {
     try {
+      // BUG FIX: use host.userId (users-table ID), not host.id (hosts-table ID).
+      // Messages are stored with sender_id / receiver_id = user IDs.
       final resp = await ApiClient.dio.get(
-        ApiEndpoints.messages(widget.host.id),
+        ApiEndpoints.messages(widget.host.userId),
       );
       final raw = ApiClient.parseData(resp);
       final list = (raw as List<dynamic>)
@@ -76,8 +79,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       final senderId =
           data['sender_id'] as String? ?? data['senderId'] as String? ?? '';
-      // Only add if it's from the host we're chatting with
-      if (senderId != widget.host.id) return;
+      // BUG FIX: compare against host.userId (user-table ID), not host.id
+      if (senderId != widget.host.userId) return;
 
       final msg = MessageModel.fromJson(data);
       setState(() {
@@ -86,8 +89,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       _scrollToBottom();
 
-      // Mark as read
-      SocketService.emit('mark_read', {'senderId': widget.host.id});
+      // Mark as read — use host.userId (user ID, not hosts-table ID)
+      SocketService.emit('mark_read', {'senderId': widget.host.userId});
     };
     SocketService.on('new_message', _newMessageCb!);
 
@@ -95,7 +98,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _typingCb = (data) {
       if (!mounted) return;
       final senderId = data['senderId'] as String? ?? '';
-      if (senderId != widget.host.id) return;
+      if (senderId != widget.host.userId) return;
       setState(() => _isTyping = data['isTyping'] as bool? ?? false);
     };
     SocketService.on('typing', _typingCb!);
@@ -130,21 +133,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _scrollToBottom();
 
-    // Emit via Socket.IO (server saves to DB and delivers to host)
+    // BUG FIX: receiverId must be host.userId (user-table ID)
     SocketService.emit('send_message', {
-      'receiverId': widget.host.id,
+      'receiverId': widget.host.userId,
       'content': text,
       'messageType': 'text',
     });
 
     // Stop typing indicator
     SocketService.emit(
-        'typing', {'receiverId': widget.host.id, 'isTyping': false});
+        'typing', {'receiverId': widget.host.userId, 'isTyping': false});
   }
 
   void _onTextChanged(String value) {
     SocketService.emit('typing', {
-      'receiverId': widget.host.id,
+      'receiverId': widget.host.userId,
       'isTyping': value.isNotEmpty,
     });
   }
@@ -155,6 +158,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_isStartingCall) return;
     setState(() => _isStartingCall = true);
     try {
+      // host.id is the hosts-table ID — correct for the call initiate endpoint
       final resp = await ApiClient.dio.post(
         ApiEndpoints.callInitiate,
         data: {
@@ -389,95 +393,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   // ── Gift sheet ────────────────────────────────────────────────────────────────
+  // BUG FIX: replaced the old inline hardcoded gift sheet that had two problems:
+  //   1. It didn't deduct from the sender's wallet (just sent a socket message).
+  //   2. It used widget.host.id (hosts-table UUID) as receiverId, but send_message
+  //      expects a user ID.
+  // Now delegates to GiftPickerSheet which calls POST /api/wallet/gift — this
+  // deducts the balance, credits the host, and emits gift_received to the host.
 
   void _showGiftSheet() {
-    final gifts = [
-      ('🌹', 'Rose', 10),
-      ('💎', 'Diamond', 500),
-      ('🎂', 'Cake', 50),
-      ('🏆', 'Trophy', 200),
-      ('❤️', 'Heart', 20),
-      ('🎵', 'Music', 30),
-    ];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text('Send a Gift 🎁', style: AppTextStyles.headingMedium),
-            const SizedBox(height: 16),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1.1,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: gifts.length,
-              itemBuilder: (_, i) {
-                final gift = gifts[i];
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    SocketService.emit('send_message', {
-                      'receiverId': widget.host.id,
-                      'content': '${gift.$1} ${gift.$2}',
-                      'messageType': 'gift',
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                            '${gift.$1} ${gift.$2} sent! ₹${gift.$3} deducted'),
-                        backgroundColor: AppColors.primary,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(gift.$1,
-                            style: const TextStyle(fontSize: 28)),
-                        const SizedBox(height: 4),
-                        Text(gift.$2, style: AppTextStyles.caption),
-                        Text('₹${gift.$3}',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.gold)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
+    GiftPickerSheet.show(
+      context,
+      ref,
+      hostId:   widget.host.id,      // hosts-table ID — correct for /api/wallet/gift
+      hostName: widget.host.name,
     );
   }
 }
