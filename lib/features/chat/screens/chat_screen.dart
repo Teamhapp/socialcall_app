@@ -122,7 +122,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final optimistic = MessageModel(
       id: 'opt_${DateTime.now().millisecondsSinceEpoch}',
       senderId: _myUserId ?? '',
-      receiverId: widget.host.id,
+      receiverId: widget.host.userId, // users-table UUID — consistent with actual send
       content: text,
       isRead: false,
       createdAt: DateTime.now(),
