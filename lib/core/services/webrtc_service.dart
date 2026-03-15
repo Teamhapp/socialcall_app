@@ -126,8 +126,11 @@ class WebRTCService {
     };
     SocketService.on('webrtc_ready', _readyCb!);
 
-    // Fallback: if webrtc_ready never arrives (race / missed), send offer anyway
-    Future.delayed(const Duration(seconds: 4), () {
+    // Fallback: if webrtc_ready never arrives (race / missed), send offer anyway.
+    // 8 s gives the host enough time to navigate to CallScreen and register its
+    // webrtc_offer listener even on a slow phone (was 4 s — too short on budget
+    // devices where activity start + camera init can take 3-5 s).
+    Future.delayed(const Duration(seconds: 8), () {
       if (!offered && _peerConnection != null) {
         offered = true;
         debugPrint('[WebRTC] CALLER webrtc_ready timeout — sending offer anyway');

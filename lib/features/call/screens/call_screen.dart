@@ -222,16 +222,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (mounted) setState(() {});
     };
 
-    // Fetch ICE servers (STUN + TURN) from backend once for this call.
-    debugPrint('[CallScreen] Fetching ICE servers...');
-    final iceServers = await _fetchIceServers();
-    debugPrint('[CallScreen] ICE servers: ${iceServers?.length ?? 'null (using defaults)'}');
+    // ── Caller: register call_connected listener BEFORE the ICE fetch ─────────
+    // BUG FIX: previously the listener was registered AFTER _fetchIceServers().
+    // If the host accepted the call during that HTTP round-trip the event arrived
+    // while no listener was attached → dropped silently → WebRTC never started.
+    // Fix: register first, capture iceServers by reference (Dart closure), fetch
+    // after.  null iceServers → WebRTCService falls back to built-in defaults.
+    List<Map<String, dynamic>>? iceServers; // mutable — filled after fetch below
 
-    // ── Caller: wait for host acceptance → start WebRTC ───────────────────────
     if (widget.isCaller) {
-      debugPrint('[CallScreen] CALLER — waiting for call_connected event');
+      debugPrint('[CallScreen] CALLER — registering call_connected listener BEFORE ICE fetch');
       _callConnectedCb = (data) async {
-        debugPrint('[CallScreen] CALLER received call_connected: $data');
+        debugPrint('[CallScreen] CALLER received call_connected: $data  (iceServers=${iceServers?.length ?? 'null-will-use-defaults'})');
         if (data['callId'] != widget.callId) {
           debugPrint('[CallScreen] CALLER call_connected ignored — wrong callId (got ${data['callId']}, expected ${widget.callId})');
           return;
@@ -241,13 +243,21 @@ class _CallScreenState extends ConsumerState<CallScreen>
           callId:     widget.callId,
           isCaller:   true,
           isVideo:    widget.isVideo,
-          iceServers: iceServers,
+          iceServers: iceServers, // null is fine — built-in STUN+TURN used
         );
         debugPrint('[CallScreen] CALLER WebRTC started');
         if (mounted) setState(() {});
       };
       SocketService.on('call_connected', _callConnectedCb!);
-    } else {
+    }
+
+    // Fetch ICE servers (STUN + TURN) from backend.
+    // Now safe: listener already registered so no event can slip through.
+    debugPrint('[CallScreen] Fetching ICE servers...');
+    iceServers = await _fetchIceServers();
+    debugPrint('[CallScreen] ICE servers: ${iceServers?.length ?? 'null (using defaults)'}');
+
+    if (!widget.isCaller) {
       // Host (receiver): start WebRTC immediately after accepting.
       debugPrint('[CallScreen] HOST — starting WebRTC immediately');
       await _webrtc.start(
