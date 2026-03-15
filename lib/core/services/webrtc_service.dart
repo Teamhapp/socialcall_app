@@ -39,6 +39,10 @@ class WebRTCService {
   final List<RTCIceCandidate> _pendingCandidates = [];
   bool _remoteDescSet = false;
 
+  // Guards so callbacks fire exactly once
+  bool _connected = false;
+  bool _failed    = false;
+
   // Default ICE servers — used when the backend fetch fails.
   // Includes Metered open relay as a free TURN fallback so calls work on
   // most mobile networks even without a dedicated TURN server configured.
@@ -97,6 +101,8 @@ class WebRTCService {
       // Host: listeners are all registered — signal caller we are ready.
       debugPrint('[WebRTC] HOST emitting webrtc_ready');
       SocketService.emit('webrtc_ready', {'callId': callId});
+      // Start ICE timeout — 30 s to connect or fail
+      _startIceTimeout();
     }
   }
 
@@ -116,6 +122,7 @@ class WebRTCService {
       SocketService.off('webrtc_ready', _readyCb);
       _readyCb = null;
       _createAndSendOffer();
+      _startIceTimeout(); // start 30 s ICE timeout
     };
     SocketService.on('webrtc_ready', _readyCb!);
 
@@ -129,6 +136,33 @@ class WebRTCService {
           _readyCb = null;
         }
         _createAndSendOffer();
+        _startIceTimeout(); // start 30 s ICE timeout from fallback path too
+      }
+    });
+  }
+
+  // ── One-shot connected / failed triggers ────────────────────────────────────
+
+  void _triggerConnected() {
+    if (_connected || _failed) return;
+    _connected = true;
+    debugPrint('[WebRTC] ✅ P2P connected');
+    onConnected?.call();
+  }
+
+  void _triggerFailed() {
+    if (_failed || _connected) return;
+    _failed = true;
+    debugPrint('[WebRTC] ❌ P2P failed');
+    onConnectionFailed?.call();
+  }
+
+  /// 30-second ICE timeout — if we haven't connected by then, fail the call.
+  void _startIceTimeout() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!_connected && _peerConnection != null) {
+        debugPrint('[WebRTC] ICE timeout after 30 s — triggering failure');
+        _triggerFailed();
       }
     });
   }
@@ -173,17 +207,27 @@ class WebRTCService {
     };
 
     // P2P connection state changes.
+    // onConnectionState is unreliable on some Android versions — use
+    // onIceConnectionState as the authoritative trigger for onConnected.
     _peerConnection!.onConnectionState = (state) {
       debugPrint('[WebRTC] Connection state → $state');
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        onConnected?.call();
+        _triggerConnected();
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        onConnectionFailed?.call();
+        _triggerFailed();
       }
     };
 
+    // PRIMARY trigger on Android — fires reliably even when onConnectionState
+    // doesn't. Both 'connected' and 'completed' mean P2P is live.
     _peerConnection!.onIceConnectionState = (state) {
       debugPrint('[WebRTC] ICE connection state → $state');
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _triggerConnected();
+      } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        _triggerFailed();
+      }
     };
 
     _peerConnection!.onSignalingState = (state) {
@@ -323,6 +367,8 @@ class WebRTCService {
     if (_iceCb    != null) SocketService.off('webrtc_ice_candidate', _iceCb);
 
     _pendingCandidates.clear();
+    _connected = false;
+    _failed    = false;
     _localStream?.getTracks().forEach((t) => t.stop());
     await _localStream?.dispose();
     await _peerConnection?.close();
