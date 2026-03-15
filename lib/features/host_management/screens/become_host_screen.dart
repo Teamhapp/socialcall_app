@@ -97,7 +97,7 @@ class _BecomeHostScreenState extends ConsumerState<BecomeHostScreen> {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.callGreen.withOpacity(0.15),
+                color: AppColors.callGreen.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.check_circle_rounded,
@@ -239,7 +239,7 @@ class _BecomeHostScreenState extends ConsumerState<BecomeHostScreen> {
                       _selectedLanguages.remove(lang);
                     }
                   }),
-                  selectedColor: AppColors.primary.withOpacity(0.2),
+                  selectedColor: AppColors.primary.withValues(alpha: 0.2),
                   checkmarkColor: AppColors.primary,
                   labelStyle: AppTextStyles.caption.copyWith(
                     color: selected ? AppColors.primary : AppColors.textSecondary,
@@ -249,7 +249,7 @@ class _BecomeHostScreenState extends ConsumerState<BecomeHostScreen> {
                   backgroundColor: AppColors.card,
                   side: BorderSide(
                     color: selected
-                        ? AppColors.primary.withOpacity(0.5)
+                        ? AppColors.primary.withValues(alpha: 0.5)
                         : AppColors.border,
                   ),
                   shape: RoundedRectangleBorder(
@@ -337,10 +337,10 @@ class _BecomeHostScreenState extends ConsumerState<BecomeHostScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.07),
+                color: AppColors.primary.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                    color: AppColors.primary.withOpacity(0.2)),
+                    color: AppColors.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [

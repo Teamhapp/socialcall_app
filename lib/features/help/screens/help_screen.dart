@@ -197,11 +197,11 @@ class _FaqTab extends StatelessWidget {
                 duration: const Duration(milliseconds: 250),
                 decoration: BoxDecoration(
                   color: isExpanded
-                      ? AppColors.primary.withOpacity(0.08)
+                      ? AppColors.primary.withValues(alpha: 0.08)
                       : AppColors.card,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isExpanded ? AppColors.primary.withOpacity(0.4) : AppColors.border,
+                    color: isExpanded ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border,
                   ),
                 ),
                 child: Padding(
@@ -402,7 +402,7 @@ class _ContactCard extends StatelessWidget {
             Container(
               width: 46, height: 46,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
@@ -488,7 +488,7 @@ class _ReportTabState extends State<_ReportTab> {
               Container(
                 width: 80, height: 80,
                 decoration: BoxDecoration(
-                  color: AppColors.online.withOpacity(0.15),
+                  color: AppColors.online.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.check_circle_rounded,
@@ -552,7 +552,7 @@ class _ReportTabState extends State<_ReportTab> {
                     horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: sel
-                      ? AppColors.primary.withOpacity(0.15)
+                      ? AppColors.primary.withValues(alpha: 0.15)
                       : AppColors.card,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
@@ -599,9 +599,9 @@ class _ReportTabState extends State<_ReportTab> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppColors.accent.withOpacity(0.08),
+            color: AppColors.accent.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [

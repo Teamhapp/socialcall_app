@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../models/host_model.dart';
 
 class CallHistoryScreen extends ConsumerStatefulWidget {
   const CallHistoryScreen({super.key});
@@ -22,12 +24,12 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
   List<Map<String, dynamic>> _userCalls = [];
   List<Map<String, dynamic>> _hostCalls = [];
   bool _isLoading = true;
+  String? _callingId; // tracks which call is being dialled back
 
   @override
   void initState() {
     super.initState();
-    final isHost =
-        ref.read(authProvider).user?.isHost ?? false;
+    final isHost = ref.read(authProvider).user?.isHost ?? false;
     _tabController = TabController(length: isHost ? 2 : 1, vsync: this);
     _load();
   }
@@ -60,6 +62,56 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Call back a host from history. Mirrors `_startCall` in FollowingScreen.
+  Future<void> _callBack(Map<String, dynamic> call) async {
+    final hostId = call['host_id'] as String? ?? '';
+    if (hostId.isEmpty || _callingId != null) return;
+    setState(() => _callingId = hostId);
+    try {
+      final resp = await ApiClient.dio.post(
+        ApiEndpoints.callInitiate,
+        data: {'hostId': hostId, 'callType': 'audio'},
+      );
+      final data = ApiClient.parseData(resp) as Map<String, dynamic>?;
+      final callId = data?['callId']?.toString() ?? '';
+      if (callId.isEmpty) throw Exception('No callId returned');
+      if (mounted) {
+        final fakeHost = HostModel(
+          id: hostId,
+          userId: hostId,
+          name: call['host_name'] as String? ?? 'Host',
+          avatar: call['host_avatar'] as String?,
+          bio: '',
+          languages: const [],
+          audioRatePerMin: 0,
+          videoRatePerMin: 0,
+          rating: 0,
+          totalCalls: 0,
+          isOnline: true,
+          isVerified: false,
+          followersCount: 0,
+        );
+        context.push('/call', extra: {
+          'host': fakeHost,
+          'isVideo': false,
+          'callId': callId,
+          'isCaller': true,
+        });
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiClient.errorMessage(e)),
+            backgroundColor: AppColors.callRed,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _callingId = null);
     }
   }
 
@@ -104,23 +156,53 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
                   ? TabBarView(
                       controller: _tabController,
                       children: [
-                        _CallList(calls: _userCalls, asHost: false),
-                        _CallList(calls: _hostCalls, asHost: true),
+                        _CallList(
+                          calls: _userCalls,
+                          asHost: false,
+                          callingId: _callingId,
+                          onCallBack: _callBack,
+                          onRemove: (idx) => setState(
+                              () => _userCalls.removeAt(idx)),
+                        ),
+                        _CallList(
+                          calls: _hostCalls,
+                          asHost: true,
+                          callingId: _callingId,
+                          onCallBack: _callBack,
+                          onRemove: (idx) => setState(
+                              () => _hostCalls.removeAt(idx)),
+                        ),
                       ],
                     )
-                  : _CallList(calls: _userCalls, asHost: false),
+                  : _CallList(
+                      calls: _userCalls,
+                      asHost: false,
+                      callingId: _callingId,
+                      onCallBack: _callBack,
+                      onRemove: (idx) =>
+                          setState(() => _userCalls.removeAt(idx)),
+                    ),
             ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Call list ─────────────────────────────────────────────────────────────────
 
 class _CallList extends StatelessWidget {
   final List<Map<String, dynamic>> calls;
   final bool asHost;
+  final String? callingId;
+  final Future<void> Function(Map<String, dynamic>) onCallBack;
+  final void Function(int) onRemove;
 
-  const _CallList({required this.calls, required this.asHost});
+  const _CallList({
+    required this.calls,
+    required this.asHost,
+    required this.callingId,
+    required this.onCallBack,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -152,19 +234,69 @@ class _CallList extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: calls.length,
-      itemBuilder: (_, i) =>
-          _CallTile(call: calls[i], asHost: asHost),
+      itemBuilder: (_, i) {
+        final call = calls[i];
+        final hostId = call['host_id'] as String? ?? '';
+        final isCallingThis = callingId == hostId;
+
+        // ── Swipe right = call back; swipe left = hide ──────────────────
+        return Dismissible(
+          key: Key('call_${call['id'] ?? i}'),
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20),
+            color: AppColors.callGreen.withValues(alpha: 0.15),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.call_rounded, color: AppColors.callGreen),
+                const SizedBox(width: 8),
+                Text('Call Back',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.callGreen)),
+              ],
+            ),
+          ),
+          secondaryBackground: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            color: AppColors.callRed.withValues(alpha: 0.15),
+            child: const Icon(Icons.delete_outline_rounded,
+                color: AppColors.callRed),
+          ),
+          confirmDismiss: (dir) async {
+            if (dir == DismissDirection.startToEnd) {
+              if (!asHost && hostId.isNotEmpty && callingId == null) {
+                await onCallBack(call);
+              }
+              return false; // don't remove the tile
+            }
+            return true; // allow hide
+          },
+          onDismissed: (_) => onRemove(i),
+          child: _CallTile(
+            call: call,
+            asHost: asHost,
+            isCallingBack: isCallingThis,
+          ),
+        );
+      },
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Call tile ─────────────────────────────────────────────────────────────────
 
 class _CallTile extends StatefulWidget {
   final Map<String, dynamic> call;
   final bool asHost;
+  final bool isCallingBack;
 
-  const _CallTile({required this.call, required this.asHost});
+  const _CallTile({
+    required this.call,
+    required this.asHost,
+    required this.isCallingBack,
+  });
 
   @override
   State<_CallTile> createState() => _CallTileState();
@@ -192,7 +324,7 @@ class _CallTileState extends State<_CallTile> {
   }
 
   void _showRateSheet() {
-    double _tempRating = 4;
+    double tempRating = 4;
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -206,7 +338,8 @@ class _CallTileState extends State<_CallTile> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
                   borderRadius: BorderRadius.circular(2),
@@ -216,18 +349,18 @@ class _CallTileState extends State<_CallTile> {
               Text('Rate this call', style: AppTextStyles.headingMedium),
               const SizedBox(height: 20),
               RatingBar.builder(
-                initialRating: _tempRating,
+                initialRating: tempRating,
                 minRating: 1,
                 itemSize: 44,
-                itemBuilder: (_, __) =>
+                itemBuilder: (_, _) =>
                     const Icon(Icons.star_rounded, color: AppColors.gold),
-                onRatingUpdate: (r) => setS(() => _tempRating = r),
+                onRatingUpdate: (r) => setS(() => tempRating = r),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  _submitRating(_tempRating);
+                  _submitRating(tempRating);
                 },
                 child: const Text('Submit Rating'),
               ),
@@ -242,11 +375,13 @@ class _CallTileState extends State<_CallTile> {
   Widget build(BuildContext context) {
     final isVideo = widget.call['call_type'] == 'video';
     final duration = widget.call['duration_seconds'] as int? ?? 0;
-    // DECIMAL columns from PostgreSQL come as strings via node-postgres
-    final rawAmount = widget.call[widget.asHost ? 'host_earnings' : 'amount_charged'];
+    final rawAmount = widget.call[
+        widget.asHost ? 'host_earnings' : 'amount_charged'];
     final amount = rawAmount == null
         ? '0.00'
-        : (rawAmount is num ? rawAmount : double.tryParse(rawAmount.toString()) ?? 0.0)
+        : (rawAmount is num
+                ? rawAmount
+                : double.tryParse(rawAmount.toString()) ?? 0.0)
             .toStringAsFixed(2);
     final otherName = widget.asHost
         ? (widget.call['caller_name'] as String? ?? 'Unknown')
@@ -258,7 +393,8 @@ class _CallTileState extends State<_CallTile> {
         ? DateTime.tryParse(widget.call['created_at'] as String)
         : null;
     final hasReview = widget.call['has_review'] as bool? ?? false;
-    final canRate = !widget.asHost && !hasReview && !_rated && duration > 0;
+    final canRate =
+        !widget.asHost && !hasReview && !_rated && duration > 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -273,16 +409,34 @@ class _CallTileState extends State<_CallTile> {
           Row(
             children: [
               // Avatar
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: otherAvatar != null
-                    ? NetworkImage(otherAvatar)
-                    : null,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
-                child: otherAvatar == null
-                    ? const Icon(Icons.person_rounded,
-                        color: AppColors.primary, size: 24)
-                    : null,
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage: otherAvatar != null
+                        ? NetworkImage(otherAvatar)
+                        : null,
+                    backgroundColor:
+                        AppColors.primary.withValues(alpha: 0.1),
+                    child: otherAvatar == null
+                        ? const Icon(Icons.person_rounded,
+                            color: AppColors.primary, size: 24)
+                        : null,
+                  ),
+                  if (widget.isCallingBack)
+                    Positioned.fill(
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black38,
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.callGreen),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               // Info
@@ -301,7 +455,7 @@ class _CallTileState extends State<_CallTile> {
                             color: (isVideo
                                     ? AppColors.primary
                                     : AppColors.callGreen)
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -385,6 +539,25 @@ class _CallTileState extends State<_CallTile> {
                           .copyWith(color: AppColors.gold)),
                 ],
               ),
+            ),
+          ],
+          // ── Swipe hint (first-time) ──────────────────────────────────
+          if (!widget.asHost && duration > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.swipe_rounded,
+                    size: 12,
+                    color: AppColors.textHint.withValues(alpha: 0.5)),
+                const SizedBox(width: 4),
+                Text(
+                  'Swipe right to call back',
+                  style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textHint.withValues(alpha: 0.5),
+                      fontSize: 10),
+                ),
+              ],
             ),
           ],
         ],

@@ -76,12 +76,16 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
   Future<void> _accept(IncomingCallState cs) async {
     if (_isAccepting) return;
     setState(() => _isAccepting = true);
+    debugPrint('[IncomingCall] HOST tapped Accept — callId=${cs.callId}');
     try {
       // Tell backend host accepted → triggers call_connected to caller
-      await ApiClient.dio.post(ApiEndpoints.callAccept(cs.callId!));
+      debugPrint('[IncomingCall] HOST calling REST accept...');
+      final resp = await ApiClient.dio.post(ApiEndpoints.callAccept(cs.callId!));
+      debugPrint('[IncomingCall] HOST REST accept response: ${resp.data}');
 
       ref.read(incomingCallProvider.notifier).dismiss();
 
+      debugPrint('[IncomingCall] HOST navigating to CallScreen isCaller=false');
       // Build caller representation from IncomingCallState — backend accept
       // response only returns {callId, channelName}, not host/caller info.
       AppRouter.router.push('/call', extra: {
@@ -93,6 +97,7 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
     } on DioException catch (e) {
       // Accept failed (caller already hung up etc.) — just dismiss
       final msg = ApiClient.errorMessage(e);
+      debugPrint('[IncomingCall] HOST accept failed: $msg');
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(msg)));
@@ -106,8 +111,13 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay>
   // ── Decline ────────────────────────────────────────────────────────────────
 
   void _decline(IncomingCallState cs) {
+    debugPrint('[IncomingCall] HOST declined callId=${cs.callId}');
+    if (cs.callId == null || cs.callId!.isEmpty) {
+      ref.read(incomingCallProvider.notifier).dismiss();
+      return;
+    }
     // Backend socket listens for 'call_rejected' (not 'call_declined')
-    SocketService.emit('call_rejected', {'callId': cs.callId});
+    SocketService.emit('call_rejected', {'callId': cs.callId!});
     ref.read(incomingCallProvider.notifier).dismiss();
   }
 
@@ -172,7 +182,7 @@ class _OverlaySheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withOpacity(0.78),
+      color: Colors.black.withValues(alpha: 0.78),
       child: SafeArea(
         child: Center(
           child: Padding(
@@ -184,7 +194,7 @@ class _OverlaySheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.45),
+                    color: AppColors.primary.withValues(alpha: 0.45),
                     blurRadius: 70,
                     spreadRadius: 6,
                   ),
@@ -202,12 +212,12 @@ class _OverlaySheet extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.primary.withOpacity(0.55),
+                          color: AppColors.primary.withValues(alpha: 0.55),
                           width: 3,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withOpacity(0.35),
+                            color: AppColors.primary.withValues(alpha: 0.35),
                             blurRadius: 32,
                             spreadRadius: 10,
                           ),
@@ -327,12 +337,12 @@ class _ActionBtn extends StatelessWidget {
             width: 70,
             height: 70,
             decoration: BoxDecoration(
-              color: active ? color : color.withOpacity(0.35),
+              color: active ? color : color.withValues(alpha: 0.35),
               shape: BoxShape.circle,
               boxShadow: active
                   ? [
                       BoxShadow(
-                        color: color.withOpacity(0.45),
+                        color: color.withValues(alpha: 0.45),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),

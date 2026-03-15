@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/gradient_button.dart';
@@ -273,7 +272,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                         backgroundImage: user?.avatar != null
                             ? NetworkImage(user!.avatar!) as ImageProvider
                             : null,
-                        backgroundColor: AppColors.primary.withOpacity(0.15),
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                         child: user?.avatar == null
                             ? const Icon(Icons.person_rounded,
                                 size: 36, color: AppColors.primary)
@@ -290,7 +289,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                             RatingBarIndicator(
                               rating: _d(_host?['rating']),
                               itemSize: 14,
-                              itemBuilder: (_, __) => const Icon(
+                              itemBuilder: (_, _) => const Icon(
                                   Icons.star_rounded,
                                   color: AppColors.gold),
                             ),
@@ -348,7 +347,7 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.35),
+                          color: AppColors.primary.withValues(alpha: 0.35),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                         ),
@@ -578,12 +577,12 @@ class _OnlineToggle extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isOnline
-              ? AppColors.callGreen.withOpacity(0.15)
+              ? AppColors.callGreen.withValues(alpha: 0.15)
               : AppColors.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isOnline
-                ? AppColors.callGreen.withOpacity(0.5)
+                ? AppColors.callGreen.withValues(alpha: 0.5)
                 : AppColors.border,
           ),
         ),
@@ -643,9 +642,9 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Column(
           children: [
@@ -698,7 +697,7 @@ class _HostCallTile extends StatelessWidget {
             radius: 22,
             backgroundImage:
                 callerAvatar != null ? NetworkImage(callerAvatar) : null,
-            backgroundColor: AppColors.primary.withOpacity(0.1),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
             child: callerAvatar == null
                 ? const Icon(Icons.person_rounded,
                     color: AppColors.primary, size: 22)
@@ -862,9 +861,9 @@ class _PayoutBottomSheetState extends State<_PayoutBottomSheet> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.callRed.withOpacity(0.08),
+                color: AppColors.callRed.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.callRed.withOpacity(0.3)),
+                border: Border.all(color: AppColors.callRed.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -908,9 +907,9 @@ class _PayoutBottomSheetState extends State<_PayoutBottomSheet> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.warning.withOpacity(0.08),
+                color: AppColors.warning.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -1041,7 +1040,7 @@ class _MethodChip extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withOpacity(0.12)
+              ? AppColors.primary.withValues(alpha: 0.12)
               : AppColors.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -1141,7 +1140,7 @@ class _PayoutHistoryTile extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.12),
+              color: statusColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(statusIcon, color: statusColor, size: 20),
@@ -1176,7 +1175,7 @@ class _PayoutHistoryTile extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(

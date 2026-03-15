@@ -146,7 +146,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     ),
                     submittedPinTheme: defaultPinTheme.copyWith(
                       decoration: defaultPinTheme.decoration!.copyWith(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         border: Border.all(color: AppColors.primary),
                       ),
                     ),
@@ -174,19 +174,22 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         )
                       : GestureDetector(
                           onTap: () async {
+                            // Cache messenger before async gap to satisfy
+                            // use_build_context_synchronously lint.
+                            final messenger =
+                                ScaffoldMessenger.of(context);
                             try {
                               await ref.read(authProvider.notifier).sendOtp(widget.phone);
                               // Only start countdown after OTP was successfully sent
                               _startTimer();
                             } catch (_) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Failed to resend OTP. Try again.'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
+                              if (!mounted) return;
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Failed to resend OTP. Try again.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
                             }
                           },
                           child: Text('Resend OTP',

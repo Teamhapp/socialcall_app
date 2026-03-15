@@ -151,7 +151,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       ApiEndpoints.setPassword,
       data: {
         'newPassword': newPassword,
-        if (currentPassword != null) 'currentPassword': currentPassword,
+        'currentPassword': ?currentPassword,
       },
     );
     if (state.user != null) {

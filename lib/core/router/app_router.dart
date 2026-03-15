@@ -23,6 +23,27 @@ import '../../models/host_model.dart';
 const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp', '/register'];
 
 class AppRouter {
+  // ── Slide-in transition for secondary screens ─────────────────────────────
+  static CustomTransitionPage<void> _slide(
+    GoRouterState state,
+    Widget child,
+  ) =>
+      CustomTransitionPage<void>(
+        key: state.pageKey,
+        child: child,
+        transitionDuration: const Duration(milliseconds: 280),
+        reverseTransitionDuration: const Duration(milliseconds: 240),
+        transitionsBuilder: (_, animation, _, child) => SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+          ),
+          child: child,
+        ),
+      );
+
   static final GoRouter router = GoRouter(
     initialLocation: '/splash',
     redirect: (_, state) async {
@@ -34,70 +55,109 @@ class AppRouter {
       return null;
     },
     routes: [
-      GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      // ── Auth / onboarding (default transitions) ───────────────────────────
+      GoRoute(path: '/splash',      builder: (_, _) => const SplashScreen()),
+      GoRoute(path: '/onboarding',  builder: (_, _) => const OnboardingScreen()),
+      GoRoute(path: '/login',       builder: (_, _) => const LoginScreen()),
       GoRoute(
         path: '/otp',
-        builder: (_, state) => OtpScreen(phone: (state.extra as String?) ?? ''),
+        builder: (_, state) =>
+            OtpScreen(phone: (state.extra as String?) ?? ''),
       ),
-      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-      GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
+      GoRoute(path: '/home',     builder: (_, _) => const HomeScreen()),
+
+      // ── Secondary screens (slide transition) ──────────────────────────────
       GoRoute(
         path: '/host/:id',
-        builder: (_, state) {
+        pageBuilder: (_, state) {
           final host = state.extra;
           if (host is! HostModel) {
-            return const Scaffold(
-              body: Center(child: Text('Host data unavailable')),
+            return _slide(
+              state,
+              const Scaffold(
+                  body: Center(child: Text('Host data unavailable'))),
             );
           }
-          return HostProfileScreen(host: host);
+          return _slide(state, HostProfileScreen(host: host));
         },
       ),
       GoRoute(
         path: '/call',
-        builder: (_, state) {
+        pageBuilder: (_, state) {
           final args = state.extra;
           if (args is! Map<String, dynamic>) {
-            return const Scaffold(
-              body: Center(child: Text('Invalid call parameters')),
+            return _slide(
+              state,
+              const Scaffold(
+                  body: Center(child: Text('Invalid call parameters'))),
             );
           }
           final host = args['host'];
           if (host is! HostModel) {
-            return const Scaffold(
-              body: Center(child: Text('Invalid call parameters')),
+            return _slide(
+              state,
+              const Scaffold(
+                  body: Center(child: Text('Invalid call parameters'))),
             );
           }
-          return CallScreen(
-            host: host,
-            isVideo: args['isVideo'] as bool? ?? false,
-            callId: args['callId']?.toString() ?? '',
-            isCaller: args['isCaller'] as bool? ?? true,
+          return _slide(
+            state,
+            CallScreen(
+              host: host,
+              isVideo: args['isVideo'] as bool? ?? false,
+              callId: args['callId']?.toString() ?? '',
+              isCaller: args['isCaller'] as bool? ?? true,
+            ),
           );
         },
       ),
       GoRoute(
         path: '/chat/:hostId',
-        builder: (_, state) {
+        pageBuilder: (_, state) {
           final host = state.extra;
           if (host is! HostModel) {
-            return const Scaffold(
-              body: Center(child: Text('Host data unavailable')),
+            return _slide(
+              state,
+              const Scaffold(
+                  body: Center(child: Text('Host data unavailable'))),
             );
           }
-          return ChatScreen(host: host);
+          return _slide(state, ChatScreen(host: host));
         },
       ),
-      GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
-      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
-      GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
-      GoRoute(path: '/become-host', builder: (_, __) => const BecomeHostScreen()),
-      GoRoute(path: '/host-dashboard', builder: (_, __) => const HostDashboardScreen()),
-      GoRoute(path: '/call-history', builder: (_, __) => const CallHistoryScreen()),
-      GoRoute(path: '/following', builder: (_, __) => const FollowingScreen()),
-      GoRoute(path: '/kyc', builder: (_, __) => const KycScreen()),
+      GoRoute(
+        path: '/wallet',
+        pageBuilder: (_, state) => _slide(state, const WalletScreen()),
+      ),
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (_, state) => _slide(state, const SettingsScreen()),
+      ),
+      GoRoute(
+        path: '/help',
+        pageBuilder: (_, state) => _slide(state, const HelpScreen()),
+      ),
+      GoRoute(
+        path: '/become-host',
+        pageBuilder: (_, state) => _slide(state, const BecomeHostScreen()),
+      ),
+      GoRoute(
+        path: '/host-dashboard',
+        pageBuilder: (_, state) => _slide(state, const HostDashboardScreen()),
+      ),
+      GoRoute(
+        path: '/call-history',
+        pageBuilder: (_, state) => _slide(state, const CallHistoryScreen()),
+      ),
+      GoRoute(
+        path: '/following',
+        pageBuilder: (_, state) => _slide(state, const FollowingScreen()),
+      ),
+      GoRoute(
+        path: '/kyc',
+        pageBuilder: (_, state) => _slide(state, const KycScreen()),
+      ),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Route not found: ${state.error}')),

@@ -693,7 +693,7 @@ class _BalanceCard extends StatelessWidget {
           const SizedBox(height: 12),
           AnimatedBuilder(
             animation: shimmerAnim,
-            builder: (_, __) => Text(
+            builder: (_, _) => Text(
               '₹${balance.toStringAsFixed(2)}',
               style: AppTextStyles.amount,
             ),

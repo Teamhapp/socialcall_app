@@ -161,7 +161,11 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                     fit: StackFit.expand,
                     children: [
                       if (host.avatar != null)
-                        Image.network(host.avatar!, fit: BoxFit.cover)
+                        // Hero tag matches host_card.dart for smooth morph transition
+                        Hero(
+                          tag: 'host_avatar_${host.id}',
+                          child: Image.network(host.avatar!, fit: BoxFit.cover),
+                        )
                       else
                         Container(color: AppColors.cardLight),
                       Container(
@@ -202,7 +206,7 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                           RatingBarIndicator(
                             rating: host.rating,
                             itemSize: 16,
-                            itemBuilder: (_, __) => const Icon(
+                            itemBuilder: (_, _) => const Icon(
                                 Icons.star_rounded, color: AppColors.gold),
                           ),
                           const SizedBox(width: 6),
@@ -234,11 +238,11 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.12),
+                                    color: AppColors.primary.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
                                         color: AppColors.primary
-                                            .withOpacity(0.3)),
+                                            .withValues(alpha: 0.3)),
                                   ),
                                   child: Text(lang,
                                       style: AppTextStyles.caption
@@ -482,9 +486,9 @@ class _PriceCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [

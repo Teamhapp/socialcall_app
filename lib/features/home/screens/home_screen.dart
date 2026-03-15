@@ -23,19 +23,48 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+// ── Time-based greeting ───────────────────────────────────────────────────────
+String _timeGreeting() {
+  final h = DateTime.now().hour;
+  if (h < 5)  return 'Good Night! 🌙';
+  if (h < 12) return 'Good Morning! ☀️';
+  if (h < 17) return 'Good Afternoon! 🌤️';
+  if (h < 21) return 'Good Evening! 🌆';
+  return 'Good Night! 🌙';
+}
+
+String _firstName(String? name) {
+  if (name == null || name.trim().isEmpty) return 'there';
+  return name.trim().split(' ').first;
+}
+
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _navIndex = 0;
+  int _unreadCount = 0;
+  late final PageController _pageController;
   final _searchController = TextEditingController();
   final _categories = ['All', 'Online', 'Hindi', 'English', 'Tamil', 'Telugu'];
   DateTime? _lastBackPress;
 
-  // Incoming-call handling is now done globally in _AppShell (main.dart) via
-  // IncomingCallOverlay, so no per-screen listener is needed here.
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _navIndex);
+  }
 
   @override
   void dispose() {
+    _pageController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _goToTab(int i) {
+    _pageController.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
@@ -57,7 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               label: 'View',
               textColor: Colors.white,
               onPressed: () {
-                setState(() => _navIndex = 0);
+                _goToTab(0);
                 hostsNotifier.setFilter('Online');
               },
             ),
@@ -73,6 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (didPop) return;
         // If not on the Discover tab, go back to it first.
         if (_navIndex != 0) {
+          _pageController.jumpToPage(0);
           setState(() => _navIndex = 0);
           return;
         }
@@ -92,61 +122,78 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       },
       child: Scaffold(
-      backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _navIndex,
-        children: [
-          _DiscoveryTab(
-            categories: _categories,
-            selectedCategory: hostsState.filter,
-            searchController: _searchController,
-            filteredHosts: hostsState.hosts,
-            isLoading: hostsState.isLoading,
-            onCategoryChanged: hostsNotifier.setFilter,
-            onSearchChanged: hostsNotifier.setSearch,
-            onRefresh: () => hostsNotifier.fetchHosts(),
+        backgroundColor: AppColors.background,
+        // ── PageView replaces IndexedStack — enables swipe-between-tabs ──
+        body: PageView(
+          controller: _pageController,
+          physics: const ClampingScrollPhysics(),
+          onPageChanged: (i) => setState(() => _navIndex = i),
+          children: [
+            _DiscoveryTab(
+              categories: _categories,
+              selectedCategory: hostsState.filter,
+              searchController: _searchController,
+              filteredHosts: hostsState.hosts,
+              isLoading: hostsState.isLoading,
+              onCategoryChanged: hostsNotifier.setFilter,
+              onSearchChanged: hostsNotifier.setSearch,
+              onRefresh: () => hostsNotifier.fetchHosts(),
+              userName: ref.read(authProvider).user?.name,
+            ),
+            _ChatListTab(
+            onUnreadCountChanged: (n) =>
+                setState(() => _unreadCount = n),
           ),
-          const _ChatListTab(),
-          const WalletScreen(isEmbedded: true),
-          const _ProfileTab(),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          border: Border(top: BorderSide(color: AppColors.border)),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _navIndex,
-          onTap: (i) => setState(() => _navIndex = i),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore_rounded),
-              label: 'Discover',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              activeIcon: Icon(Icons.chat_bubble_rounded),
-              label: 'Chats',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              activeIcon: Icon(Icons.account_balance_wallet_rounded),
-              label: 'Wallet',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
-              label: 'Profile',
-            ),
+            const WalletScreen(isEmbedded: true),
+            const _ProfileTab(),
           ],
         ),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _navIndex,
+            onTap: _goToTab,
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.explore_outlined),
+                activeIcon: Icon(Icons.explore_rounded),
+                label: 'Discover',
+              ),
+              BottomNavigationBarItem(
+                icon: Badge.count(
+                  count: _unreadCount,
+                  isLabelVisible: _unreadCount > 0,
+                  child: const Icon(Icons.chat_bubble_outline_rounded),
+                ),
+                activeIcon: Badge.count(
+                  count: _unreadCount,
+                  isLabelVisible: _unreadCount > 0,
+                  child: const Icon(Icons.chat_bubble_rounded),
+                ),
+                label: 'Chats',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                activeIcon: Icon(Icons.account_balance_wallet_rounded),
+                label: 'Wallet',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.person_outline_rounded),
+                activeIcon: Icon(Icons.person_rounded),
+                label: 'Profile',
+              ),
+            ],
+          ),
+        ),
       ),
-      ), // PopScope
     );
   }
 }
+
+// ── Discovery tab ─────────────────────────────────────────────────────────────
 
 class _DiscoveryTab extends StatelessWidget {
   final List<String> categories;
@@ -154,6 +201,7 @@ class _DiscoveryTab extends StatelessWidget {
   final TextEditingController searchController;
   final List<HostModel> filteredHosts;
   final bool isLoading;
+  final String? userName;
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<String> onSearchChanged;
   final Future<void> Function() onRefresh;
@@ -167,6 +215,7 @@ class _DiscoveryTab extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onSearchChanged,
     required this.onRefresh,
+    this.userName,
   });
 
   @override
@@ -176,173 +225,184 @@ class _DiscoveryTab extends StatelessWidget {
         onRefresh: onRefresh,
         color: AppColors.primary,
         child: CustomScrollView(
-        slivers: [
-          // Header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Good Evening! 👋',
-                              style: AppTextStyles.bodyMedium),
-                          Text('Find your host',
-                              style: AppTextStyles.headingLarge),
-                        ],
-                      ),
-                      const Spacer(),
-                      // Wallet balance chip
-                      GestureDetector(
-                        onTap: () => context.push('/wallet'),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient,
-                            borderRadius: BorderRadius.circular(20),
+          slivers: [
+            // Header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_timeGreeting(),
+                                style: AppTextStyles.bodyMedium),
+                            Text('Hi, ${_firstName(userName)}!',
+                                style: AppTextStyles.headingLarge),
+                          ],
+                        ),
+                        const Spacer(),
+                        // Wallet balance chip
+                        GestureDetector(
+                          onTap: () => context.push('/wallet'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                    Icons.account_balance_wallet_rounded,
+                                    color: Colors.white,
+                                    size: 16),
+                                const SizedBox(width: 4),
+                                Consumer(
+                                  builder: (_, ref, _) {
+                                    final user =
+                                        ref.watch(authProvider).user;
+                                    return Text(
+                                      'Rs.${user?.walletBalance.toStringAsFixed(0) ?? '0'}',
+                                      style: AppTextStyles.labelLarge
+                                          .copyWith(color: Colors.white),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                  Icons.account_balance_wallet_rounded,
-                                  color: Colors.white,
-                                  size: 16),
-                              const SizedBox(width: 4),
-                              Consumer(
-                                builder: (_, ref, __) {
-                                  final user = ref.watch(authProvider).user;
-                                  return Text(
-                                    'Rs.${user?.walletBalance.toStringAsFixed(0) ?? '0'}',
-                                    style: AppTextStyles.labelLarge.copyWith(color: Colors.white),
-                                  );
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Search bar
+                    TextField(
+                      controller: searchController,
+                      onChanged: onSearchChanged,
+                      style: AppTextStyles.bodyLarge,
+                      decoration: InputDecoration(
+                        hintText: 'Search by name...',
+                        prefixIcon: const Icon(Icons.search_rounded,
+                            color: AppColors.textHint),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () {
+                                  searchController.clear();
+                                  onSearchChanged('');
                                 },
-                              ),
+                                child: const Icon(Icons.close_rounded,
+                                    color: AppColors.textHint),
+                              )
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Categories
+                    SizedBox(
+                      height: 38,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categories.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(width: 8),
+                        itemBuilder: (_, i) => CategoryChip(
+                          label: categories[i],
+                          isSelected: selectedCategory == categories[i],
+                          onTap: () => onCategoryChanged(categories[i]),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Online hosts count
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: AppColors.online,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${filteredHosts.where((h) => h.isOnline).length} hosts online now',
+                          style: AppTextStyles.labelMedium
+                              .copyWith(color: AppColors.online),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            ),
+
+            // Host grid
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: filteredHosts.isEmpty
+                  ? SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.search_off_rounded,
+                                  size: 48, color: AppColors.textHint),
+                              const SizedBox(height: 12),
+                              Text('No hosts found',
+                                  style: AppTextStyles.bodyMedium),
                             ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Search bar
-                  TextField(
-                    controller: searchController,
-                    onChanged: onSearchChanged,
-                    style: AppTextStyles.bodyLarge,
-                    decoration: InputDecoration(
-                      hintText: 'Search by name...',
-                      prefixIcon: const Icon(Icons.search_rounded,
-                          color: AppColors.textHint),
-                      suffixIcon: searchController.text.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                searchController.clear();
-                                onSearchChanged('');
-                              },
-                              child: const Icon(Icons.close_rounded,
-                                  color: AppColors.textHint),
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Categories
-                  SizedBox(
-                    height: 38,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) => CategoryChip(
-                        label: categories[i],
-                        isSelected: selectedCategory == categories[i],
-                        onTap: () => onCategoryChanged(categories[i]),
+                    )
+                  : SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                        (_, i) => HostCard(host: filteredHosts[i]),
+                        childCount: filteredHosts.length,
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.72,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Online hosts count
-                  Row(
-                    children: [
-                      Container(
-                        width: 8, height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.online,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${filteredHosts.where((h) => h.isOnline).length} hosts online now',
-                        style: AppTextStyles.labelMedium
-                            .copyWith(color: AppColors.online),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
             ),
-          ),
-
-          // Host grid
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: filteredHosts.isEmpty
-                ? SliverToBoxAdapter(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.search_off_rounded,
-                                size: 48, color: AppColors.textHint),
-                            const SizedBox(height: 12),
-                            Text('No hosts found',
-                                style: AppTextStyles.bodyMedium),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                : SliverGrid(
-                    delegate: SliverChildBuilderDelegate(
-                      (_, i) => HostCard(host: filteredHosts[i]),
-                      childCount: filteredHosts.length,
-                    ),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.72,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                  ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
-      ),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ],
+        ),
       ),
     );
   }
 }
 
+// ── Chat list tab ─────────────────────────────────────────────────────────────
+
 class _ChatListTab extends StatefulWidget {
-  const _ChatListTab();
+  final void Function(int unreadCount)? onUnreadCountChanged;
+  const _ChatListTab({this.onUnreadCountChanged});
 
   @override
   State<_ChatListTab> createState() => _ChatListTabState();
 }
 
-class _ChatListTabState extends State<_ChatListTab> {
+class _ChatListTabState extends State<_ChatListTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Map<String, dynamic>> _conversations = [];
   bool _isLoading = true;
 
@@ -355,22 +415,43 @@ class _ChatListTabState extends State<_ChatListTab> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final resp =
-          await ApiClient.dio.get(ApiEndpoints.conversations);
+      final resp = await ApiClient.dio.get(ApiEndpoints.conversations);
       final raw = ApiClient.parseData(resp) as List? ?? [];
       if (mounted) {
+        final convs = raw.cast<Map<String, dynamic>>();
+        final total = convs.fold<int>(
+          0,
+          (sum, c) => sum + (int.tryParse('${c['unread_count'] ?? 0}') ?? 0),
+        );
         setState(() {
-          _conversations = raw.cast<Map<String, dynamic>>();
+          _conversations = convs;
           _isLoading = false;
         });
+        widget.onUnreadCountChanged?.call(total);
       }
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ── Swipe background helper ───────────────────────────────────────────────
+  Widget _swipeBg({
+    required Color color,
+    required IconData icon,
+    required Alignment alignment,
+    required EdgeInsets padding,
+  }) =>
+      Container(
+        alignment: alignment,
+        padding: padding,
+        color: color.withValues(alpha: 0.15),
+        child: Icon(icon, color: color),
+      );
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,7 +539,7 @@ class _ChatListTabState extends State<_ChatListTab> {
                                 ? NetworkImage(otherAvatar)
                                 : null,
                             backgroundColor:
-                                AppColors.primary.withOpacity(0.1),
+                                AppColors.primary.withValues(alpha: 0.1),
                             child: otherAvatar == null
                                 ? const Icon(Icons.person_rounded,
                                     color: AppColors.primary)
@@ -466,9 +547,11 @@ class _ChatListTabState extends State<_ChatListTab> {
                           ),
                           if (isOnline)
                             Positioned(
-                              bottom: 0, right: 0,
+                              bottom: 0,
+                              right: 0,
                               child: Container(
-                                width: 12, height: 12,
+                                width: 12,
+                                height: 12,
                                 decoration: BoxDecoration(
                                   color: AppColors.online,
                                   shape: BoxShape.circle,
@@ -523,22 +606,34 @@ class _ChatListTabState extends State<_ChatListTab> {
                           extra: fakeHost),
                     );
 
-                    // Wrap in Dismissible for swipe-to-hide
+                    // ── Bidirectional swipe ──────────────────────────────
+                    // Swipe right (startToEnd) → mark as read (clear badge)
+                    // Swipe left  (endToStart) → delete conversation
                     return Dismissible(
                       key: Key('conv_$otherUserId'),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
+                      background: _swipeBg(
+                        color: Colors.blueAccent,
+                        icon: Icons.mark_chat_read_rounded,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 20),
+                      ),
+                      secondaryBackground: _swipeBg(
+                        color: AppColors.callRed,
+                        icon: Icons.delete_outline_rounded,
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 20),
-                        color: AppColors.callRed.withOpacity(0.15),
-                        child: const Icon(Icons.delete_outline_rounded,
-                            color: AppColors.callRed),
                       ),
-                      onDismissed: (_) {
-                        setState(() {
-                          _conversations.removeAt(i);
-                        });
+                      confirmDismiss: (dir) async {
+                        if (dir == DismissDirection.startToEnd) {
+                          // Mark as read locally — don't remove item
+                          setState(() =>
+                              _conversations[i]['unread_count'] = 0);
+                          return false;
+                        }
+                        return true; // allow delete
                       },
+                      onDismissed: (_) =>
+                          setState(() => _conversations.removeAt(i)),
                       child: tile,
                     );
                   },
@@ -558,6 +653,8 @@ class _ChatListTabState extends State<_ChatListTab> {
     return DateFormat('dd/MM').format(dt);
   }
 }
+
+// ── Profile tab ───────────────────────────────────────────────────────────────
 
 class _ProfileTab extends ConsumerStatefulWidget {
   const _ProfileTab();
@@ -581,7 +678,6 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
             filename: 'avatar.jpg'),
       });
       await ApiClient.dio.patch(ApiEndpoints.profileUpdate, data: formData);
-      // Refresh user in state
       await ref.read(authProvider.notifier).refreshBalance();
     } on DioException catch (e) {
       if (mounted) {
@@ -594,9 +690,91 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
     }
   }
 
+  // ── Grouped section builder ───────────────────────────────────────────────
+  Widget _buildSection(String label, List<_MenuItem> items) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            label.toUpperCase(),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textHint,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: items.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final item = entry.value;
+              final isLast = idx == items.length - 1;
+              return Column(
+                children: [
+                  ListTile(
+                    shape: isLast
+                        ? const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                                bottom: Radius.circular(14)))
+                        : null,
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: item.isDestructive
+                            ? Colors.redAccent.withValues(alpha: 0.15)
+                            : item.iconColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        item.icon,
+                        color: item.isDestructive
+                            ? Colors.redAccent
+                            : item.iconColor,
+                        size: 18,
+                      ),
+                    ),
+                    title: Text(
+                      item.label,
+                      style: AppTextStyles.bodyLarge.copyWith(
+                          color: item.isDestructive
+                              ? Colors.redAccent
+                              : null),
+                    ),
+                    subtitle: item.subtitle != null
+                        ? Text(item.subtitle!,
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.textHint))
+                        : null,
+                    trailing: const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.textHint, size: 18),
+                    onTap: item.onTap,
+                  ),
+                  if (!isLast)
+                    const Divider(
+                        height: 1, indent: 54, color: AppColors.border),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
+    final isHost = user?.isHost ?? false;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -604,7 +782,7 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-            // Avatar
+            // ── Avatar ──────────────────────────────────────────────────
             GestureDetector(
               onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
               child: Stack(
@@ -614,7 +792,8 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
                     backgroundImage: user?.avatar != null
                         ? NetworkImage(user!.avatar!) as ImageProvider
                         : null,
-                    backgroundColor: AppColors.primary.withOpacity(0.2),
+                    backgroundColor:
+                        AppColors.primary.withValues(alpha: 0.2),
                     child: user?.avatar == null
                         ? const Icon(Icons.person_rounded,
                             size: 50, color: AppColors.primary)
@@ -625,14 +804,16 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
                       child: CircleAvatar(
                         backgroundColor: Colors.black38,
                         child: SizedBox(
-                          width: 28, height: 28,
+                          width: 28,
+                          height: 28,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         ),
                       ),
                     ),
                   Positioned(
-                    bottom: 0, right: 0,
+                    bottom: 0,
+                    right: 0,
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: const BoxDecoration(
@@ -650,30 +831,72 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
             Text(user?.name ?? 'User', style: AppTextStyles.headingMedium),
             Text(user?.phone ?? '', style: AppTextStyles.bodyMedium),
             const SizedBox(height: 32),
-            ..._profileMenuItems(context, ref).map((item) => Column(
-              children: [
-                ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  tileColor: AppColors.card,
-                  leading: Icon(item.icon,
-                      color: item.isDestructive ? Colors.redAccent : AppColors.primary),
-                  title: Text(item.label,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                          color: item.isDestructive ? Colors.redAccent : null)),
-                  subtitle: item.subtitle != null
-                      ? Text(item.subtitle!,
-                          style: AppTextStyles.bodySmall
-                              .copyWith(color: AppColors.textHint))
-                      : null,
-                  trailing: const Icon(Icons.chevron_right_rounded,
-                      color: AppColors.textHint),
-                  onTap: item.onTap,
+
+            // ── Section 1: Host ──────────────────────────────────────────
+            _buildSection('Host', [
+              if (isHost)
+                _MenuItem(
+                  icon: Icons.dashboard_rounded,
+                  iconColor: Colors.orange,
+                  label: 'Host Dashboard',
+                  subtitle: 'Earnings, calls & online status',
+                  onTap: () => context.push('/host-dashboard'),
+                )
+              else
+                _MenuItem(
+                  icon: Icons.headset_mic_rounded,
+                  iconColor: Colors.orange,
+                  label: 'Become a Host',
+                  subtitle: 'Earn by taking calls',
+                  onTap: () => context.push('/become-host'),
                 ),
-                const SizedBox(height: 8),
-              ],
-            )),
+            ]),
+
+            // ── Section 2: Activity ──────────────────────────────────────
+            _buildSection('Activity', [
+              _MenuItem(
+                icon: Icons.history_rounded,
+                iconColor: Colors.blueAccent,
+                label: 'Call History',
+                onTap: () => context.push('/call-history'),
+              ),
+              _MenuItem(
+                icon: Icons.favorite_rounded,
+                iconColor: Colors.pinkAccent,
+                label: 'Following',
+                onTap: () => context.push('/following'),
+              ),
+            ]),
+
+            // ── Section 3: Account ───────────────────────────────────────
+            _buildSection('Account', [
+              _MenuItem(
+                icon: Icons.support_agent_rounded,
+                iconColor: Colors.teal,
+                label: 'Support',
+                onTap: () => context.push('/help'),
+              ),
+              _MenuItem(
+                icon: Icons.settings_rounded,
+                iconColor: Colors.grey,
+                label: 'Settings',
+                onTap: () => context.push('/settings'),
+              ),
+            ]),
+
+            // ── Logout (standalone) ──────────────────────────────────────
+            _buildSection('', [
+              _MenuItem(
+                icon: Icons.logout_rounded,
+                iconColor: Colors.redAccent,
+                label: 'Logout',
+                isDestructive: true,
+                onTap: () async {
+                  await ref.read(authProvider.notifier).logout();
+                  if (context.mounted) context.go('/login');
+                },
+              ),
+            ]),
           ],
         ),
       ),
@@ -681,73 +904,24 @@ class _ProfileTabState extends ConsumerState<_ProfileTab> {
   }
 }
 
-// ── Profile Tab menu helpers ──────────────────────────────────────────────────
+// ── Menu helpers ──────────────────────────────────────────────────────────────
 
 class _MenuItem {
   final IconData icon;
+  final Color iconColor;
   final String label;
   final String? subtitle;
   final bool isDestructive;
   final VoidCallback? onTap;
+
   const _MenuItem({
     required this.icon,
+    required this.iconColor,
     required this.label,
     this.subtitle,
     this.isDestructive = false,
     this.onTap,
   });
-}
-
-List<_MenuItem> _profileMenuItems(BuildContext context, WidgetRef ref) {
-  final isHost = ref.read(authProvider).user?.isHost ?? false;
-  return [
-    // ── Host-specific ──────────────────────────────────────────────────────
-    if (isHost)
-      _MenuItem(
-        icon: Icons.dashboard_rounded,
-        label: 'Host Dashboard',
-        subtitle: 'Earnings, calls & online status',
-        onTap: () => context.push('/host-dashboard'),
-      )
-    else
-      _MenuItem(
-        icon: Icons.headset_mic_rounded,
-        label: 'Become a Host',
-        subtitle: 'Earn by taking calls',
-        onTap: () => context.push('/become-host'),
-      ),
-
-    // ── Common ─────────────────────────────────────────────────────────────
-    _MenuItem(
-      icon: Icons.history_rounded,
-      label: 'Call History',
-      onTap: () => context.push('/call-history'),
-    ),
-    _MenuItem(
-      icon: Icons.favorite_rounded,
-      label: 'Following',
-      onTap: () => context.push('/following'),
-    ),
-    _MenuItem(
-      icon: Icons.support_agent_rounded,
-      label: 'Support',
-      onTap: () => context.push('/help'),
-    ),
-    _MenuItem(
-      icon: Icons.settings_rounded,
-      label: 'Settings',
-      onTap: () => context.push('/settings'),
-    ),
-    _MenuItem(
-      icon: Icons.logout_rounded,
-      label: 'Logout',
-      isDestructive: true,
-      onTap: () async {
-        await ref.read(authProvider.notifier).logout();
-        if (context.mounted) context.go('/login');
-      },
-    ),
-  ];
 }
 
 // Incoming call is now handled globally by IncomingCallOverlay in main.dart.

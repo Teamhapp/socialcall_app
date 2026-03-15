@@ -20,7 +20,7 @@ class OnlineBadge extends StatelessWidget {
             color: isOnline ? AppColors.online : AppColors.offline,
             shape: BoxShape.circle,
             boxShadow: isOnline
-                ? [BoxShadow(color: AppColors.online.withOpacity(0.5), blurRadius: 4)]
+                ? [BoxShadow(color: AppColors.online.withValues(alpha: 0.5), blurRadius: 4)]
                 : null,
           ),
         ),

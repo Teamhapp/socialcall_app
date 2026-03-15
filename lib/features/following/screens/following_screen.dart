@@ -19,13 +19,16 @@ class FollowingScreen extends StatefulWidget {
 class _FollowingScreenState extends State<FollowingScreen> {
   List<HostModel> _hosts = [];
   bool _isLoading = true;
-  String? _callingHostId; // tracks which host is being called
+  String? _callingHostId;  // tracks which host is being called
+  String? _unfollowingId;  // tracks which host is being unfollowed
 
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  // ── Start audio / video call ──────────────────────────────────────────────
 
   Future<void> _startCall(HostModel host, bool isVideo) async {
     if (_callingHostId != null) return;
@@ -57,6 +60,40 @@ class _FollowingScreenState extends State<FollowingScreen> {
       }
     } finally {
       if (mounted) setState(() => _callingHostId = null);
+    }
+  }
+
+  // ── Unfollow ──────────────────────────────────────────────────────────────
+
+  Future<void> _unfollow(HostModel host) async {
+    if (_unfollowingId != null) return;
+    setState(() => _unfollowingId = host.id);
+    try {
+      await ApiClient.dio.delete(
+        ApiEndpoints.hostFollow(host.id),
+      );
+      if (mounted) {
+        setState(() {
+          _hosts.removeWhere((h) => h.id == host.id);
+          _unfollowingId = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unfollowed ${host.name}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        setState(() => _unfollowingId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiClient.errorMessage(e)),
+            backgroundColor: AppColors.callRed,
+          ),
+        );
+      }
     }
   }
 
@@ -128,16 +165,108 @@ class _FollowingScreenState extends State<FollowingScreen> {
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _hosts.length,
-                      itemBuilder: (_, i) => _FollowingTile(
-                        host: _hosts[i],
-                        callingHostId: _callingHostId,
-                        onCall: _startCall,
-                      ),
+                      itemBuilder: (_, i) {
+                        final host = _hosts[i];
+                        // ── Swipe right = audio call; left = unfollow ──
+                        return Dismissible(
+                          key: Key('following_${host.id}'),
+                          background: Container(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.only(left: 20),
+                            color: AppColors.callGreen.withValues(alpha: 0.15),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.call_rounded,
+                                    color: AppColors.callGreen),
+                                const SizedBox(width: 8),
+                                Text('Audio Call',
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.callGreen)),
+                              ],
+                            ),
+                          ),
+                          secondaryBackground: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            color: AppColors.primary.withValues(alpha: 0.15),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.max,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text('Unfollow',
+                                    style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.primary)),
+                                const SizedBox(width: 8),
+                                Icon(Icons.person_remove_rounded,
+                                    color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                          confirmDismiss: (dir) async {
+                            if (dir == DismissDirection.startToEnd) {
+                              // Audio call — don't remove the tile
+                              if (host.isOnline && _callingHostId == null) {
+                                _startCall(host, false);
+                              } else if (!host.isOnline) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${host.name} is offline'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                              return false;
+                            }
+                            // Unfollow swipe — show confirm dialog
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: AppColors.surface,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                title: Text('Unfollow ${host.name}?',
+                                    style: AppTextStyles.headingSmall),
+                                content: Text(
+                                  'You will no longer receive notifications when ${host.name} goes online.',
+                                  style: AppTextStyles.bodySmall,
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, true),
+                                    child: Text('Unfollow',
+                                        style: TextStyle(
+                                            color: AppColors.primary)),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await _unfollow(host);
+                            }
+                            return false; // _unfollow handles removal
+                          },
+                          onDismissed: (_) {},
+                          child: _FollowingTile(
+                            host: host,
+                            callingHostId: _callingHostId,
+                            onCall: _startCall,
+                          ),
+                        );
+                      },
                     ),
             ),
     );
   }
 }
+
+// ── Following tile ────────────────────────────────────────────────────────────
 
 class _FollowingTile extends StatelessWidget {
   final HostModel host;
@@ -172,7 +301,8 @@ class _FollowingTile extends StatelessWidget {
                   backgroundImage: host.avatar != null
                       ? NetworkImage(host.avatar!)
                       : null,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundColor:
+                      AppColors.primary.withValues(alpha: 0.1),
                   child: host.avatar == null
                       ? const Icon(Icons.person_rounded,
                           color: AppColors.primary, size: 28)
@@ -180,9 +310,11 @@ class _FollowingTile extends StatelessWidget {
                 ),
                 if (host.isOnline)
                   Positioned(
-                    bottom: 2, right: 2,
+                    bottom: 2,
+                    right: 2,
                     child: Container(
-                      width: 10, height: 10,
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
                         color: AppColors.online,
                         shape: BoxShape.circle,
@@ -214,7 +346,7 @@ class _FollowingTile extends StatelessWidget {
                       RatingBarIndicator(
                         rating: host.rating,
                         itemSize: 12,
-                        itemBuilder: (_, __) => const Icon(
+                        itemBuilder: (_, _) => const Icon(
                             Icons.star_rounded, color: AppColors.gold),
                       ),
                       const SizedBox(width: 4),
@@ -224,6 +356,13 @@ class _FollowingTile extends StatelessWidget {
                       const SizedBox(width: 8),
                       OnlineBadge(isOnline: host.isOnline),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '← swipe to call  •  swipe to unfollow →',
+                    style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textHint.withValues(alpha: 0.5),
+                        fontSize: 9),
                   ),
                 ],
               ),
@@ -248,7 +387,6 @@ class _FollowingTile extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Audio call button
                       _QuickCallBtn(
                         icon: Icons.call_rounded,
                         color: AppColors.callGreen,
@@ -259,7 +397,6 @@ class _FollowingTile extends StatelessWidget {
                             : null,
                       ),
                       const SizedBox(width: 8),
-                      // Video call button
                       _QuickCallBtn(
                         icon: Icons.videocam_rounded,
                         color: AppColors.primary,
@@ -280,7 +417,7 @@ class _FollowingTile extends StatelessWidget {
   }
 }
 
-// ── Small circular call button used in list tiles ─────────────────────────────
+// ── Small circular call button ────────────────────────────────────────────────
 
 class _QuickCallBtn extends StatelessWidget {
   final IconData icon;

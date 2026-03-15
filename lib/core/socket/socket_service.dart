@@ -46,7 +46,11 @@ class SocketService with WidgetsBindingObserver {
     _socket = io.io(
       ApiEndpoints.baseUrl,
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          // BUG 3 FIX: Allow polling as fallback transport.
+          // Replit's proxy can kill pure WebSocket connections after ~55 s.
+          // Socket.IO will upgrade to WebSocket when possible but falls back
+          // to long-polling so signaling never dies mid-call.
+          .setTransports(['websocket', 'polling'])
           .setAuth({'token': token})
           .enableAutoConnect()
           .enableReconnection()
@@ -91,9 +95,10 @@ class SocketService with WidgetsBindingObserver {
 
   static void on(String event, MessageCallback callback) {
     _listeners.putIfAbsent(event, () => []).add(callback);
-    _socket?.on(event, (data) => callback(
-      data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
-    ));
+    _socket?.on(event, (data) {
+      debugPrint('[Socket] received "$event"');
+      callback(data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{});
+    });
   }
 
   // ── Remove a specific listener (won't wipe others) ──────────────────────────
@@ -119,6 +124,11 @@ class SocketService with WidgetsBindingObserver {
   // ── Emit ────────────────────────────────────────────────────────────────────
 
   static void emit(String event, Map<String, dynamic> data) {
+    final connected = _socket?.connected ?? false;
+    debugPrint('[Socket] emit "$event" connected=$connected data=${data.keys.toList()}');
+    if (!connected) {
+      debugPrint('[Socket] WARNING: emit "$event" called but socket is NOT connected!');
+    }
     _socket?.emit(event, data);
   }
 

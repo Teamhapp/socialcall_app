@@ -174,14 +174,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
     try {
       final resp = await ApiClient.dio.get(ApiEndpoints.iceServers);
       final raw = ApiClient.parseData(resp) as List?;
+      debugPrint('[CallScreen] ICE servers from backend: $raw');
       return raw?.cast<Map<String, dynamic>>();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[CallScreen] ICE server fetch failed: $e — using defaults');
       return null; // WebRTCService will use built-in defaults
     }
   }
 
   Future<void> _initWebRTC() async {
+    debugPrint('[CallScreen] _initWebRTC() — isCaller=${widget.isCaller} callId=${widget.callId} isVideo=${widget.isVideo}');
     await _webrtc.initialize();
+    debugPrint('[CallScreen] WebRTC renderers initialized');
 
     // ── P2P connection established ─────────────────────────────────────────────
     _webrtc.onConnected = () {
@@ -219,29 +223,40 @@ class _CallScreenState extends ConsumerState<CallScreen>
     };
 
     // Fetch ICE servers (STUN + TURN) from backend once for this call.
+    debugPrint('[CallScreen] Fetching ICE servers...');
     final iceServers = await _fetchIceServers();
+    debugPrint('[CallScreen] ICE servers: ${iceServers?.length ?? 'null (using defaults)'}');
 
     // ── Caller: wait for host acceptance → start WebRTC ───────────────────────
     if (widget.isCaller) {
+      debugPrint('[CallScreen] CALLER — waiting for call_connected event');
       _callConnectedCb = (data) async {
-        if (data['callId'] != widget.callId) return;
+        debugPrint('[CallScreen] CALLER received call_connected: $data');
+        if (data['callId'] != widget.callId) {
+          debugPrint('[CallScreen] CALLER call_connected ignored — wrong callId (got ${data['callId']}, expected ${widget.callId})');
+          return;
+        }
+        debugPrint('[CallScreen] CALLER starting WebRTC...');
         await _webrtc.start(
           callId:     widget.callId,
           isCaller:   true,
           isVideo:    widget.isVideo,
           iceServers: iceServers,
         );
+        debugPrint('[CallScreen] CALLER WebRTC started');
         if (mounted) setState(() {});
       };
       SocketService.on('call_connected', _callConnectedCb!);
     } else {
       // Host (receiver): start WebRTC immediately after accepting.
+      debugPrint('[CallScreen] HOST — starting WebRTC immediately');
       await _webrtc.start(
         callId:     widget.callId,
         isCaller:   false,
         isVideo:    widget.isVideo,
         iceServers: iceServers,
       );
+      debugPrint('[CallScreen] HOST WebRTC started, waiting for offer');
       if (mounted) setState(() {});
     }
 
@@ -504,7 +519,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 itemCount: 5,
                 itemPadding:
                     const EdgeInsets.symmetric(horizontal: 6),
-                itemBuilder: (_, __) => const Icon(
+                itemBuilder: (_, _) => const Icon(
                     Icons.star_rounded,
                     color: AppColors.gold),
                 onRatingUpdate: (r) =>
@@ -697,7 +712,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       top: 0, left: 0, right: 0,
       child: SafeArea(
         child: Container(
-          color: AppColors.warning.withOpacity(0.92),
+          color: AppColors.warning.withValues(alpha: 0.92),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
@@ -913,7 +928,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
         gradient: LinearGradient(
           colors: [
             const Color(0xFF0F0F1A),
-            AppColors.primary.withOpacity(0.3),
+            AppColors.primary.withValues(alpha: 0.3),
           ],
           begin: Alignment.topCenter,
           end:   Alignment.bottomCenter,
@@ -928,7 +943,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
               padding: const EdgeInsets.symmetric(
                   horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -957,11 +972,11 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: AppColors.primary.withOpacity(0.5),
+                      color: AppColors.primary.withValues(alpha: 0.5),
                       width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       blurRadius: 30,
                       spreadRadius: 5,
                     ),
@@ -1116,8 +1131,8 @@ class _ControlButton extends StatelessWidget {
             width: 56, height: 56,
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.primary.withOpacity(0.3)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppColors.primary.withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.1),
               shape: BoxShape.circle,
               border: Border.all(
                   color:
