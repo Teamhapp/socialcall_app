@@ -511,16 +511,26 @@ class _ChatListTabState extends State<_ChatListTab>
                         : null;
 
                     // Build a minimal HostModel so ChatScreen gets what it
-                    // needs (id = other_user_id for socket communication)
+                    // needs:
+                    //   id       = hosts-table UUID (for calls & gifts)
+                    //   userId   = users-table UUID (for messages & socket)
+                    final hostId =
+                        conv['host_id'] as String? ?? '';
+                    final audioRate =
+                        double.tryParse('${conv['audio_rate_per_min'] ?? 0}') ??
+                            0.0;
+                    final videoRate =
+                        double.tryParse('${conv['video_rate_per_min'] ?? 0}') ??
+                            0.0;
                     final fakeHost = HostModel(
-                      id: otherUserId,
+                      id: hostId,
                       userId: otherUserId,
                       name: otherName,
                       avatar: otherAvatar,
                       bio: '',
                       languages: const [],
-                      audioRatePerMin: 0,
-                      videoRatePerMin: 0,
+                      audioRatePerMin: audioRate,
+                      videoRatePerMin: videoRate,
                       rating: 0,
                       totalCalls: 0,
                       isOnline: isOnline,
