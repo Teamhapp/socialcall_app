@@ -161,11 +161,13 @@ class WebRTCService {
     onConnectionFailed?.call();
   }
 
-  /// 30-second ICE timeout — if we haven't connected by then, fail the call.
+  /// 15-second ICE timeout — if we haven't connected by then, fail the call.
+  /// Reduced from 30 s so users get faster feedback on network failures.
+  /// Total failure window: 8 s (webrtc_ready wait) + 15 s = 23 s max.
   void _startIceTimeout() {
-    Future.delayed(const Duration(seconds: 30), () {
+    Future.delayed(const Duration(seconds: 15), () {
       if (!_connected && _peerConnection != null) {
-        debugPrint('[WebRTC] ICE timeout after 30 s — triggering failure');
+        debugPrint('[WebRTC] ICE timeout after 15 s — triggering failure');
         _triggerFailed();
       }
     });

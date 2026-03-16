@@ -229,7 +229,16 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
   Future<void> _initWebRTC() async {
     debugPrint('[CallScreen] _initWebRTC() — isCaller=${widget.isCaller} callId=${widget.callId} isVideo=${widget.isVideo}');
-    await _webrtc.initialize();
+    try {
+      await _webrtc.initialize();
+    } catch (e) {
+      debugPrint('[CallScreen] Renderer init failed: $e');
+      // Always complete the completer so the call_connected listener never hangs.
+      if (!_webrtcReadyCompleter.isCompleted) {
+        _webrtcReadyCompleter.complete(null);
+      }
+      return;
+    }
     debugPrint('[CallScreen] WebRTC renderers initialized');
 
     // ── P2P connection established ─────────────────────────────────────────────
@@ -237,6 +246,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
       if (!mounted) return;
       _ringTimer?.cancel(); // host answered — no more timeout needed
       setState(() => _status = CallStatus.connected);
+
+      // Apply the initial speaker state — Android WebRTC defaults to earpiece,
+      // but our UI defaults to speaker-on, so we must explicitly activate it.
+      _webrtc.setSpeaker(_isSpeakerOn);
 
       // Start per-second billing ticker with wallet check every 10 s.
       _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -254,12 +267,22 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
     // ── P2P connection failed ──────────────────────────────────────────────────
     _webrtc.onConnectionFailed = () {
-      if (!mounted) return;
+      if (!mounted || _callEndedByUs) return;
+      _callEndedByUs = true;
       _cleanupTimers();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connection failed')),
-      );
-      context.go('/home');
+      CallNotificationService.dismiss();
+      // Tell backend to end the call — otherwise it stays 'connected' in the DB,
+      // server-side wallet billing keeps running, and the user can't start a new call.
+      SocketService.emit('call_ended', {'callId': widget.callId});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connection failed. Please check your network and try again.'),
+            backgroundColor: AppColors.callRed,
+          ),
+        );
+        context.go('/home');
+      }
     };
 
     // ── Remote stream ready ────────────────────────────────────────────────────
