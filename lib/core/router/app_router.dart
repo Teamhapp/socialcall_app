@@ -18,6 +18,8 @@ import '../../features/host_management/screens/host_dashboard_screen.dart';
 import '../../features/host_management/screens/kyc_screen.dart';
 import '../../features/call_history/screens/call_history_screen.dart';
 import '../../features/following/screens/following_screen.dart';
+import '../../features/live/screens/live_stream_screen.dart';
+import '../../features/live/screens/watch_stream_screen.dart';
 import '../../models/host_model.dart';
 
 const _publicRoutes = ['/splash', '/onboarding', '/login', '/otp', '/register'];
@@ -157,6 +159,24 @@ class AppRouter {
       GoRoute(
         path: '/kyc',
         pageBuilder: (_, state) => _slide(state, const KycScreen()),
+      ),
+      GoRoute(
+        path: '/go-live',
+        pageBuilder: (_, state) => _slide(state, const LiveStreamScreen()),
+      ),
+      GoRoute(
+        path: '/live/:streamId',
+        pageBuilder: (_, state) {
+          final args = state.extra as Map<String, dynamic>?;
+          return _slide(
+            state,
+            WatchStreamScreen(
+              streamId: state.pathParameters['streamId'] ?? '',
+              hostName: args?['hostName'] as String? ?? 'Host',
+              title: args?['title'] as String? ?? 'Live Stream',
+            ),
+          );
+        },
       ),
     ],
     errorBuilder: (_, state) => Scaffold(

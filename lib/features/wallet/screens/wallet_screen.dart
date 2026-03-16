@@ -4,11 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../../core/api/api_client.dart';
+import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/wallet_provider.dart';
 import '../../../models/transaction_model.dart';
 import '../../../shared/widgets/gradient_button.dart';
+
+// Bonus coins per purchase tier: amount → coins credited
+const _bonusTiers = {
+  49: (coins: 49,   bonus: 0),
+  99: (coins: 99,   bonus: 0),
+  199: (coins: 220, bonus: 10),
+  499: (coins: 560, bonus: 12),
+  999: (coins: 1150, bonus: 15),
+  1999: (coins: 2400, bonus: 20),
+};
 
 class WalletScreen extends ConsumerStatefulWidget {
   final bool isEmbedded;
@@ -29,6 +42,9 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
   final _rechargeAmounts = [49, 99, 199, 499, 999, 1999];
   int? _selectedAmount;
   String? _pendingOrderId;
+  String? _referralCode;
+  int _referralCount = 0;
+  double _referralEarned = 0;
 
   @override
   void initState() {
@@ -44,6 +60,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    _fetchReferral();
+  }
+
+  Future<void> _fetchReferral() async {
+    try {
+      final res = await ApiClient.dio.get(ApiEndpoints.referralCode);
+      if (res.data['success'] == true) {
+        final d = res.data['data'];
+        if (mounted) {
+          setState(() {
+            _referralCode = d['referral_code'] as String?;
+            _referralCount = int.tryParse(d['referral_count']?.toString() ?? '0') ?? 0;
+            _referralEarned = double.tryParse(d['total_earned']?.toString() ?? '0') ?? 0;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -581,6 +614,22 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
 
                       const SizedBox(height: 8),
                       _PaymentMethodsRow(),
+                      const SizedBox(height: 20),
+
+                      // ─── Referral card ──────────────────────────────
+                      if (_referralCode != null)
+                        _ReferralCard(
+                          code: _referralCode!,
+                          referralCount: _referralCount,
+                          totalEarned: _referralEarned,
+                          onShare: () {
+                            Share.share(
+                              'Join SocialCall and get ₹50 FREE coins!\nUse my referral code: $_referralCode\nDownload: https://socialcallbackend.replit.app',
+                              subject: 'Get ₹50 free coins on SocialCall!',
+                            );
+                          },
+                        ),
+
                       const SizedBox(height: 28),
                       _HowItWorks(rateExample: 15),
                       const SizedBox(height: 28),
@@ -662,10 +711,9 @@ class _BalanceCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.account_balance_wallet_rounded,
-                  color: Colors.white70, size: 20),
+              const Text('💎', style: TextStyle(fontSize: 20)),
               const SizedBox(width: 8),
-              Text('Wallet Balance',
+              Text('Coin Balance',
                   style: AppTextStyles.bodyMedium
                       .copyWith(color: Colors.white70)),
               const Spacer(),
@@ -694,7 +742,7 @@ class _BalanceCard extends StatelessWidget {
           AnimatedBuilder(
             animation: shimmerAnim,
             builder: (_, _) => Text(
-              '₹${balance.toStringAsFixed(2)}',
+              '${balance.toInt()} Coins',
               style: AppTextStyles.amount,
             ),
           ),
@@ -702,7 +750,7 @@ class _BalanceCard extends StatelessWidget {
           Text(
             balance > 30
                 ? 'Ready to use • ~${(balance / 15).toStringAsFixed(0)} min of audio calls'
-                : '⚠️  Low balance — add money to continue calls',
+                : '⚠️  Low coins — add coins to continue calls',
             style: AppTextStyles.caption.copyWith(
               color: balance > 30 ? Colors.white60 : Colors.orangeAccent,
             ),
@@ -751,6 +799,10 @@ class _RechargeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tier = _bonusTiers[amount];
+    final coins = tier?.coins ?? amount;
+    final bonus = tier?.bonus ?? 0;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -773,23 +825,50 @@ class _RechargeChip extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Center(
-          child: isLoading
-              ? const SizedBox(
+        child: isLoading
+            ? const Center(
+                child: SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : Text(
-                  '₹$amount',
-                  style: AppTextStyles.labelLarge.copyWith(
-                    color: isSelected ? Colors.white : AppColors.primary,
-                  ),
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                 ),
-        ),
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '₹$amount',
+                    style: AppTextStyles.labelMedium.copyWith(
+                      color: isSelected ? Colors.white : AppColors.primary,
+                    ),
+                  ),
+                  Text(
+                    '💎 $coins',
+                    style: AppTextStyles.caption.copyWith(
+                      color: isSelected ? Colors.white70 : AppColors.textSecondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                  if (bonus > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.2)
+                            : AppColors.callGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '+$bonus%',
+                        style: AppTextStyles.caption.copyWith(
+                          color: isSelected ? Colors.white : AppColors.callGreen,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -875,6 +954,146 @@ class _HowItWorks extends StatelessWidget {
                   ],
                 ),
               )),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferralCard extends StatelessWidget {
+  final String code;
+  final int referralCount;
+  final double totalEarned;
+  final VoidCallback onShare;
+
+  const _ReferralCard({
+    required this.code,
+    required this.referralCount,
+    required this.totalEarned,
+    required this.onShare,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFF6B6B).withValues(alpha: 0.15),
+            const Color(0xFFFFD93D).withValues(alpha: 0.15),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🎁', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Refer & Earn',
+                        style: AppTextStyles.labelLarge
+                            .copyWith(color: AppColors.textPrimary)),
+                    Text('₹50 coins for you + your friend',
+                        style: AppTextStyles.caption
+                            .copyWith(color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${referralCount} referred',
+                  style: AppTextStyles.caption
+                      .copyWith(color: AppColors.primary, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        code,
+                        style: AppTextStyles.labelLarge.copyWith(
+                          color: AppColors.primary,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: code));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Referral code copied!'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: const Icon(Icons.copy_rounded,
+                            size: 16, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: onShare,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.share_rounded, color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text('Share',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Poppins')),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (totalEarned > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '💰 Total earned from referrals: ₹${totalEarned.toInt()} coins',
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.callGreen, fontWeight: FontWeight.w600),
+            ),
+          ],
         ],
       ),
     );

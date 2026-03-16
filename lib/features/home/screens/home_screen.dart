@@ -15,6 +15,7 @@ import '../../../models/host_model.dart';
 import '../widgets/host_card.dart';
 import '../widgets/category_chip.dart';
 import '../../wallet/screens/wallet_screen.dart';
+import '../../live/screens/watch_stream_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -321,6 +322,10 @@ class _DiscoveryTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
 
+                    // LIVE NOW strip
+                    _LiveNowStrip(),
+                    const SizedBox(height: 16),
+
                     // Online hosts count
                     Row(
                       children: [
@@ -384,6 +389,149 @@ class _DiscoveryTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── LIVE NOW strip ─────────────────────────────────────────────────────────────
+
+class _LiveNowStrip extends StatefulWidget {
+  @override
+  State<_LiveNowStrip> createState() => _LiveNowStripState();
+}
+
+class _LiveNowStripState extends State<_LiveNowStrip> {
+  List<Map<String, dynamic>> _streams = [];
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await ApiClient.dio.get(ApiEndpoints.streams);
+      final list = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+      if (mounted) setState(() { _streams = list; _loaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _streams.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8, height: 8,
+              decoration: const BoxDecoration(color: AppColors.callRed, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text('LIVE NOW', style: AppTextStyles.labelMedium.copyWith(color: AppColors.callRed)),
+            const SizedBox(width: 4),
+            Text('${_streams.length}', style: AppTextStyles.caption.copyWith(
+                color: AppColors.callRed, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _streams.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              final s = _streams[i];
+              return GestureDetector(
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => WatchStreamScreen(
+                    streamId: s['id'].toString(),
+                    hostName: s['host_name'] as String? ?? 'Host',
+                    title: s['title'] as String? ?? 'Live Stream',
+                  ),
+                )),
+                child: Container(
+                  width: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.callRed.withValues(alpha: 0.6), width: 2),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (s['host_avatar'] != null)
+                          Image.network(s['host_avatar'] as String,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const ColoredBox(color: AppColors.card))
+                        else
+                          const ColoredBox(color: AppColors.card,
+                              child: Icon(Icons.person_rounded,
+                                  color: AppColors.textHint, size: 32)),
+                        // Gradient overlay
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black87],
+                            ),
+                          ),
+                        ),
+                        // LIVE badge + viewer count
+                        Positioned(
+                          top: 6, left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.callRed,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('LIVE',
+                                style: TextStyle(color: Colors.white, fontSize: 8,
+                                    fontWeight: FontWeight.w800, fontFamily: 'Poppins')),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 6, left: 0, right: 0,
+                          child: Column(
+                            children: [
+                              Text(s['host_name'] as String? ?? '',
+                                  style: const TextStyle(color: Colors.white, fontSize: 10,
+                                      fontWeight: FontWeight.w600, fontFamily: 'Poppins'),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.remove_red_eye_rounded,
+                                      color: Colors.white70, size: 10),
+                                  const SizedBox(width: 2),
+                                  Text('${s['viewer_count'] ?? 0}',
+                                      style: const TextStyle(color: Colors.white70,
+                                          fontSize: 9, fontFamily: 'Poppins')),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

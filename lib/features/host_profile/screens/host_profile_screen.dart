@@ -11,6 +11,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../shared/widgets/online_badge.dart';
+import '../../live/screens/watch_stream_screen.dart';
 
 class HostProfileScreen extends ConsumerStatefulWidget {
   final HostModel host;
@@ -24,11 +25,84 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
   bool _isStartingCall = false;
   bool _isFollowing = false;
   bool _isTogglingFollow = false;
+  bool _isSubscribed = false;
+  bool _isSubscribing = false;
+  Map<String, dynamic>? _activeStream;
 
   @override
   void initState() {
     super.initState();
     _checkFollowing();
+    _checkSubscription();
+    _checkActiveStream();
+  }
+
+  Future<void> _checkSubscription() async {
+    try {
+      final res = await ApiClient.dio.get(
+          ApiEndpoints.subscriptionStatus(widget.host.id));
+      if (mounted) {
+        setState(() => _isSubscribed = res.data['data']['isSubscribed'] == true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _checkActiveStream() async {
+    try {
+      final res = await ApiClient.dio.get(ApiEndpoints.streams);
+      final streams = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+      final hostStream = streams.where(
+        (s) => s['host_user_id'].toString() == widget.host.id,
+      ).firstOrNull;
+      if (mounted) setState(() => _activeStream = hostStream);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSubscribe() async {
+    if (_isSubscribing) return;
+    setState(() => _isSubscribing = true);
+    HapticFeedback.mediumImpact();
+    try {
+      if (_isSubscribed) {
+        await ApiClient.dio.delete(ApiEndpoints.subscribeHost(widget.host.id));
+        if (mounted) setState(() => _isSubscribed = false);
+      } else {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Subscribe'),
+            content: Text('Subscribe to ${widget.host.name} for ₹99/month?\n\nThis will deduct 99 coins from your wallet.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                child: const Text('Subscribe ₹99', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+        await ApiClient.dio.post(ApiEndpoints.subscribeHost(widget.host.id));
+        if (mounted) setState(() => _isSubscribed = true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Subscribed to ${widget.host.name}! ✓'),
+                backgroundColor: AppColors.callGreen),
+          );
+        }
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.errorMessage(e)),
+              backgroundColor: AppColors.callRed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubscribing = false);
+    }
   }
 
   Future<void> _checkFollowing() async {
@@ -337,6 +411,65 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                               ),
                             ),
                           ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Subscribe + Watch Live buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isSubscribing ? null : _toggleSubscribe,
+                              icon: _isSubscribing
+                                  ? const SizedBox(width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2))
+                                  : Icon(
+                                      _isSubscribed
+                                          ? Icons.check_circle_rounded
+                                          : Icons.star_outline_rounded,
+                                      size: 18),
+                              label: Text(_isSubscribed ? 'Subscribed ✓' : 'Subscribe ₹99/mo'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _isSubscribed
+                                    ? AppColors.callGreen
+                                    : AppColors.accent,
+                                side: BorderSide(
+                                    color: _isSubscribed
+                                        ? AppColors.callGreen
+                                        : AppColors.accent),
+                                minimumSize: const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
+                          if (_activeStream != null) ...[
+                            const SizedBox(width: 10),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => WatchStreamScreen(
+                                    streamId: _activeStream!['id'].toString(),
+                                    hostName: widget.host.name,
+                                    title: _activeStream!['title'] as String? ?? 'Live',
+                                  ),
+                                ),
+                              ),
+                              icon: const Icon(Icons.live_tv_rounded,
+                                  color: Colors.white, size: 18),
+                              label: const Text('Watch Live',
+                                  style: TextStyle(color: Colors.white,
+                                      fontWeight: FontWeight.w700)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.callRed,
+                                minimumSize: const Size(0, 50),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
 

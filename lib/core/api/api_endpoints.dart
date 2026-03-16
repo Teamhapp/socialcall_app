@@ -62,4 +62,17 @@ class ApiEndpoints {
   static const String gifts = '/api/wallet/gifts';
   static const String sendGift = '/api/wallet/gift';
   static const String redeemPromo = '/api/wallet/redeem-promo';
+  static const String referralCode = '/api/wallet/referral';
+  static const String applyReferral = '/api/wallet/referral/apply';
+
+  // Live Streams
+  static const String streams = '/api/streams';
+  static const String goLive = '/api/streams/go-live';
+  static String streamToken(String id) => '/api/streams/$id/token';
+  static String streamLeave(String id) => '/api/streams/$id/leave';
+  static String streamEnd(String id) => '/api/streams/$id/end';
+
+  // Subscriptions
+  static String subscribeHost(String hostId) => '/api/subscriptions/$hostId';
+  static String subscriptionStatus(String hostId) => '/api/subscriptions/status/$hostId';
 }
