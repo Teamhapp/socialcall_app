@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -31,6 +32,12 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
   final _commentCtrl = TextEditingController();
   int _viewerCount = 0;
 
+  // Socket listener refs for cleanup
+  MessageCallback? _commentCb;
+  MessageCallback? _giftCb;
+  MessageCallback? _endedCb;
+  MessageCallback? _viewerJoinedCb;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +47,8 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
   @override
   void dispose() {
     _commentCtrl.dispose();
+    _cleanupSocketListeners();
+    SocketService.emit('leave_stream', {'streamId': widget.streamId});
     _leaveStream();
     super.dispose();
   }
@@ -49,6 +58,57 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
       await _room?.disconnect();
       await ApiClient.dio.post(ApiEndpoints.streamLeave(widget.streamId));
     } catch (_) {}
+  }
+
+  void _setupSocketListeners() {
+    // Join the socket room so we receive real-time stream events
+    SocketService.emit('join_stream', {'streamId': widget.streamId});
+
+    _commentCb = (data) {
+      if (!mounted) return;
+      final name = data['name'] as String? ?? 'Viewer';
+      final text = data['text'] as String? ?? '';
+      if (text.isEmpty) return;
+      setState(() {
+        _comments.add(_Comment(name: name, text: text));
+        if (_comments.length > 50) _comments.removeAt(0);
+      });
+    };
+    SocketService.on('stream_comment', _commentCb!);
+
+    _giftCb = (data) {
+      if (!mounted) return;
+      final emoji  = (data['gift'] as Map?)?['emoji'] as String? ?? '🎁';
+      final name   = (data['gift'] as Map?)?['name']  as String? ?? 'Gift';
+      final sender = data['senderName'] as String? ?? 'Viewer';
+      setState(() {
+        _comments.add(_Comment(name: sender, text: 'sent $emoji $name'));
+        if (_comments.length > 50) _comments.removeAt(0);
+      });
+    };
+    SocketService.on('stream_gift_received', _giftCb!);
+
+    _viewerJoinedCb = (data) {
+      final count = (data['viewerCount'] as num?)?.toInt();
+      if (count != null && mounted) setState(() => _viewerCount = count);
+    };
+    SocketService.on('viewer_joined', _viewerJoinedCb!);
+
+    _endedCb = (data) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The stream has ended')),
+      );
+      Navigator.of(context).pop();
+    };
+    SocketService.on('stream_ended', _endedCb!);
+  }
+
+  void _cleanupSocketListeners() {
+    if (_commentCb     != null) { SocketService.off('stream_comment',       _commentCb);     _commentCb     = null; }
+    if (_giftCb        != null) { SocketService.off('stream_gift_received', _giftCb);        _giftCb        = null; }
+    if (_viewerJoinedCb != null){ SocketService.off('viewer_joined',        _viewerJoinedCb);_viewerJoinedCb = null; }
+    if (_endedCb       != null) { SocketService.off('stream_ended',         _endedCb);       _endedCb       = null; }
   }
 
   Future<void> _joinStream() async {
@@ -76,6 +136,9 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
 
       await room.connect(livekitUrl, token);
 
+      // Join socket room for real-time comments, gifts, and stream-end events
+      _setupSocketListeners();
+
       if (mounted) {
         setState(() {
           _room = room;
@@ -96,7 +159,12 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
   void _sendComment(String text) {
     if (text.trim().isEmpty) return;
     _commentCtrl.clear();
-    // Socket comment handled externally — for now show locally
+    // Emit to socket — server relays to all viewers and the host
+    SocketService.emit('stream_comment', {
+      'streamId': widget.streamId,
+      'text': text.trim(),
+    });
+    // Show own comment immediately (don't wait for server echo)
     setState(() {
       _comments.add(_Comment(name: 'You', text: text.trim()));
       if (_comments.length > 50) _comments.removeAt(0);
@@ -415,18 +483,14 @@ class _GiftPickerState extends State<_GiftPicker> {
   }
 
   Future<void> _sendGift(Map<String, dynamic> gift) async {
-    try {
-      Navigator.of(context).pop();
-      // Use socket for stream gift (wired in socket.js stream_gift event)
-      widget.onGiftSent(gift['name'] as String? ?? 'Gift');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send gift: $e'),
-              backgroundColor: AppColors.callRed),
-        );
-      }
-    }
+    Navigator.of(context).pop();
+    // Emit stream_gift via socket — server deducts coins, credits host (65%),
+    // increments gift_count, and broadcasts stream_gift_received to the room.
+    SocketService.emit('stream_gift', {
+      'streamId': widget.streamId,
+      'giftId': gift['id'],
+    });
+    widget.onGiftSent(gift['name'] as String? ?? 'Gift');
   }
 
   @override

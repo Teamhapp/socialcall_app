@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 
 class LiveStreamScreen extends ConsumerStatefulWidget {
@@ -29,9 +30,19 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
 
   final List<_Comment> _comments = [];
 
+  // Socket listener refs for cleanup
+  MessageCallback? _commentCb;
+  MessageCallback? _giftCb;
+  MessageCallback? _viewerJoinedCb;
+  MessageCallback? _viewerLeftCb;
+
   @override
   void dispose() {
     _titleCtrl.dispose();
+    _cleanupSocketListeners();
+    if (_streamId != null) {
+      SocketService.emit('leave_stream', {'streamId': _streamId!});
+    }
     _endStreamSilent();
     super.dispose();
   }
@@ -44,6 +55,53 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
         await ApiClient.dio.delete(ApiEndpoints.streamEnd(_streamId!));
       }
     } catch (_) {}
+  }
+
+  void _setupSocketListeners() {
+    SocketService.emit('join_stream', {'streamId': _streamId!});
+
+    _commentCb = (data) {
+      if (!mounted) return;
+      final name = data['name'] as String? ?? 'Viewer';
+      final text = data['text'] as String? ?? '';
+      if (text.isEmpty) return;
+      setState(() {
+        _comments.add(_Comment(name: name, text: text));
+        if (_comments.length > 50) _comments.removeAt(0);
+      });
+    };
+    SocketService.on('stream_comment', _commentCb!);
+
+    _giftCb = (data) {
+      if (!mounted) return;
+      final emoji  = (data['gift'] as Map?)?['emoji'] as String? ?? '🎁';
+      final name   = (data['gift'] as Map?)?['name']  as String? ?? 'Gift';
+      final sender = data['senderName'] as String? ?? 'Viewer';
+      setState(() {
+        _giftCount++;
+        _comments.add(_Comment(name: sender, text: 'sent $emoji $name'));
+        if (_comments.length > 50) _comments.removeAt(0);
+      });
+    };
+    SocketService.on('stream_gift_received', _giftCb!);
+
+    _viewerJoinedCb = (data) {
+      final count = (data['viewerCount'] as num?)?.toInt();
+      if (count != null && mounted) setState(() => _viewerCount = count);
+    };
+    SocketService.on('viewer_joined', _viewerJoinedCb!);
+
+    _viewerLeftCb = (data) {
+      if (mounted) setState(() => _viewerCount = (_viewerCount - 1).clamp(0, 999999));
+    };
+    SocketService.on('viewer_left', _viewerLeftCb!);
+  }
+
+  void _cleanupSocketListeners() {
+    if (_commentCb      != null) { SocketService.off('stream_comment',       _commentCb);      _commentCb      = null; }
+    if (_giftCb         != null) { SocketService.off('stream_gift_received', _giftCb);         _giftCb         = null; }
+    if (_viewerJoinedCb != null) { SocketService.off('viewer_joined',        _viewerJoinedCb); _viewerJoinedCb = null; }
+    if (_viewerLeftCb   != null) { SocketService.off('viewer_left',          _viewerLeftCb);   _viewerLeftCb   = null; }
   }
 
   Future<void> _goLive() async {
@@ -68,13 +126,15 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
       await room.localParticipant?.publishVideoTrack(_videoTrack!);
       await room.localParticipant?.setMicrophoneEnabled(true);
 
-      // Listen for viewer count / gift events via socket (handled by parent)
       setState(() {
         _room = room;
         _isLive = true;
         _isLoading = false;
         _title = data['stream']['title'] as String? ?? 'Live Stream';
       });
+
+      // Join socket room to receive viewer comments, gifts, and join/leave events
+      _setupSocketListeners();
 
       // Keep screen on
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -108,6 +168,8 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
     if (confirm != true) return;
 
     setState(() => _isLoading = true);
+    _cleanupSocketListeners();
+    if (_streamId != null) SocketService.emit('leave_stream', {'streamId': _streamId!});
     try {
       await _room?.disconnect();
       _videoTrack?.stop();
