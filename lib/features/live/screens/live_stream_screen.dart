@@ -1,8 +1,9 @@
 import 'dart:async';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:livekit_client/livekit_client.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/socket/socket_service.dart';
@@ -16,17 +17,16 @@ class LiveStreamScreen extends ConsumerStatefulWidget {
 }
 
 class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
-  Room? _room;
-  LocalVideoTrack? _videoTrack;
-  bool _isLive = false;
-  bool _isLoading = false;
-  bool _isCameraOn = true;
-  bool _isMicOn = true;
-  int _viewerCount = 0;
-  int _giftCount = 0;
+  RtcEngine? _engine;
+  bool _isLive      = false;
+  bool _isLoading   = false;
+  bool _isCameraOn  = true;
+  bool _isMicOn     = true;
+  int  _viewerCount = 0;
+  int  _giftCount   = 0;
   String? _streamId;
-  String _title = 'Live Stream';
-  final _titleCtrl = TextEditingController();
+  String  _title    = 'Live Stream';
+  final _titleCtrl  = TextEditingController();
 
   final List<_Comment> _comments = [];
 
@@ -49,8 +49,9 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
 
   Future<void> _endStreamSilent() async {
     try {
-      await _room?.disconnect();
-      _videoTrack?.stop();
+      await _engine?.leaveChannel();
+      await _engine?.release();
+      _engine = null;
       if (_streamId != null) {
         await ApiClient.dio.delete(ApiEndpoints.streamEnd(_streamId!));
       }
@@ -109,34 +110,64 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Request permissions
+      final statuses = await [Permission.camera, Permission.microphone].request();
+      for (final e in statuses.entries) {
+        if (!e.value.isGranted) throw Exception('${e.key} permission denied');
+      }
+
+      // Get Agora token from backend
       final res = await ApiClient.dio.post(ApiEndpoints.goLive, data: {
         'title': _titleCtrl.text.trim().isEmpty ? 'Live Stream' : _titleCtrl.text.trim(),
       });
 
-      final data = res.data['data'];
-      final token = data['token'] as String;
-      final livekitUrl = data['livekitUrl'] as String;
-      _streamId = data['stream']['id'].toString();
+      final data        = res.data['data'];
+      final token       = data['token']       as String;
+      final channelName = data['channelName'] as String;
+      final uid         = (data['uid'] as num).toInt();
+      final appId       = data['appId']       as String;
+      _streamId         = data['stream']['id'].toString();
 
-      final room = Room();
-      await room.connect(livekitUrl, token);
+      // Initialize Agora engine
+      final engine = createAgoraRtcEngine();
+      await engine.initialize(RtcEngineContext(appId: appId));
+      await engine.enableVideo();
+      await engine.enableAudio();
+      await engine.startPreview();
 
-      // Publish camera + mic
-      _videoTrack = await LocalVideoTrack.createCameraTrack();
-      await room.localParticipant?.publishVideoTrack(_videoTrack!);
-      await room.localParticipant?.setMicrophoneEnabled(true);
+      engine.registerEventHandler(
+        RtcEngineEventHandler(
+          onJoinChannelSuccess: (connection, elapsed) {
+            debugPrint('[LiveStream] Host joined channel: ${connection.channelId}');
+          },
+          onError: (err, msg) {
+            debugPrint('[LiveStream] Agora error: $err $msg');
+          },
+        ),
+      );
+
+      await engine.joinChannel(
+        token:     token,
+        channelId: channelName,
+        uid:       uid,
+        options: const ChannelMediaOptions(
+          channelProfile:         ChannelProfileType.channelProfileLiveBroadcasting,
+          clientRoleType:         ClientRoleType.clientRoleBroadcaster,
+          publishCameraTrack:     true,
+          publishMicrophoneTrack: true,
+          autoSubscribeVideo:     false,
+          autoSubscribeAudio:     false,
+        ),
+      );
 
       setState(() {
-        _room = room;
-        _isLive = true;
+        _engine   = engine;
+        _isLive   = true;
         _isLoading = false;
-        _title = data['stream']['title'] as String? ?? 'Live Stream';
+        _title    = data['stream']['title'] as String? ?? 'Live Stream';
       });
 
-      // Join socket room to receive viewer comments, gifts, and join/leave events
       _setupSocketListeners();
-
-      // Keep screen on
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     } catch (e) {
       setState(() => _isLoading = false);
@@ -170,9 +201,11 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
     setState(() => _isLoading = true);
     _cleanupSocketListeners();
     if (_streamId != null) SocketService.emit('leave_stream', {'streamId': _streamId!});
+
     try {
-      await _room?.disconnect();
-      _videoTrack?.stop();
+      await _engine?.leaveChannel();
+      await _engine?.release();
+      _engine = null;
       if (_streamId != null) {
         await ApiClient.dio.delete(ApiEndpoints.streamEnd(_streamId!));
       }
@@ -183,12 +216,12 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
   }
 
   Future<void> _toggleCamera() async {
-    await _room?.localParticipant?.setCameraEnabled(!_isCameraOn);
+    await _engine?.enableLocalVideo(!_isCameraOn);
     setState(() => _isCameraOn = !_isCameraOn);
   }
 
   Future<void> _toggleMic() async {
-    await _room?.localParticipant?.setMicrophoneEnabled(!_isMicOn);
+    await _engine?.muteLocalAudioStream(_isMicOn);
     setState(() => _isMicOn = !_isMicOn);
   }
 
@@ -248,9 +281,12 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
                         width: 20, height: 20,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.live_tv_rounded, color: Colors.white),
-                label: Text(_isLoading ? 'Starting...' : 'Go Live Now',
-                    style: const TextStyle(color: Colors.white, fontSize: 16,
-                        fontWeight: FontWeight.w700, fontFamily: 'Poppins')),
+                label: Text(
+                  _isLoading ? 'Starting...' : 'Go Live Now',
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 16,
+                      fontWeight: FontWeight.w700, fontFamily: 'Poppins'),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.callRed,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -265,14 +301,20 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
   }
 
   Widget _buildLiveScreen() {
-    final track = _videoTrack;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Video preview
-          if (track != null && _isCameraOn)
-            Positioned.fill(child: VideoTrackRenderer(track))
+          // Local camera preview (full screen)
+          if (_engine != null && _isCameraOn)
+            Positioned.fill(
+              child: AgoraVideoView(
+                controller: VideoViewController(
+                  rtcEngine: _engine!,
+                  canvas: const VideoCanvas(uid: 0),
+                ),
+              ),
+            )
           else
             const Positioned.fill(
               child: ColoredBox(
@@ -299,8 +341,9 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
                       children: [
                         Icon(Icons.circle, color: Colors.white, size: 8),
                         SizedBox(width: 4),
-                        Text('LIVE', style: TextStyle(color: Colors.white,
-                            fontWeight: FontWeight.w800, fontSize: 12, fontFamily: 'Poppins')),
+                        Text('LIVE',
+                            style: TextStyle(color: Colors.white,
+                                fontWeight: FontWeight.w800, fontSize: 12, fontFamily: 'Poppins')),
                       ],
                     ),
                   ),
@@ -319,8 +362,7 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.remove_red_eye_rounded,
-                            color: Colors.white70, size: 14),
+                        const Icon(Icons.remove_red_eye_rounded, color: Colors.white70, size: 14),
                         const SizedBox(width: 4),
                         Text('$_viewerCount',
                             style: const TextStyle(color: Colors.white,
@@ -336,8 +378,7 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
           // Gift ticker
           if (_giftCount > 0)
             Positioned(
-              top: 80,
-              right: 16,
+              top: 80, right: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
@@ -348,8 +389,9 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
                   children: [
                     const Text('🎁', style: TextStyle(fontSize: 16)),
                     const SizedBox(width: 4),
-                    Text('$_giftCount', style: const TextStyle(color: Colors.white,
-                        fontWeight: FontWeight.w700, fontFamily: 'Poppins')),
+                    Text('$_giftCount',
+                        style: const TextStyle(color: Colors.white,
+                            fontWeight: FontWeight.w700, fontFamily: 'Poppins')),
                   ],
                 ),
               ),
@@ -357,9 +399,7 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
 
           // Comments
           Positioned(
-            left: 0,
-            right: 80,
-            bottom: 100,
+            left: 0, right: 80, bottom: 100,
             child: SizedBox(
               height: 200,
               child: ListView.builder(
@@ -382,7 +422,8 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
                             TextSpan(text: '${c.name}  ',
                                 style: const TextStyle(
                                     color: AppColors.primary, fontWeight: FontWeight.w700)),
-                            TextSpan(text: c.text, style: const TextStyle(color: Colors.white)),
+                            TextSpan(text: c.text,
+                                style: const TextStyle(color: Colors.white)),
                           ],
                         ),
                       ),
@@ -395,15 +436,13 @@ class _LiveStreamScreenState extends ConsumerState<LiveStreamScreen> {
 
           // Bottom controls
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
+            left: 0, right: 0, bottom: 0,
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
+                  end:   Alignment.topCenter,
                   colors: [Colors.black87, Colors.transparent],
                 ),
               ),
@@ -464,8 +503,7 @@ class _ControlBtn extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 48, height: 48,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
               shape: BoxShape.circle,

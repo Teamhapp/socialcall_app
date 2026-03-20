@@ -34,6 +34,14 @@ class IncomingCallNotifier extends StateNotifier<IncomingCallState> {
   MessageCallback? _incomingCb;
   MessageCallback? _cancelledCb;
 
+  // ── Pending call from FCM tap while app was killed ─────────────────────────
+  // Set by FirebaseService before Riverpod is ready; consumed in startListening().
+  static Map<String, dynamic>? _pendingCall;
+
+  static void setPendingCall(Map<String, dynamic> data) {
+    _pendingCall = data;
+  }
+
   IncomingCallNotifier() : super(const IncomingCallState());
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -42,6 +50,25 @@ class IncomingCallNotifier extends StateNotifier<IncomingCallState> {
   /// authenticated.  Safe to call multiple times (no-ops if already listening).
   void startListening() {
     if (_incomingCb != null) return; // already listening
+
+    // Consume any call that arrived via FCM while the app was killed
+    final pending = _pendingCall;
+    if (pending != null) {
+      _pendingCall = null;
+      final callId    = pending['callId']     as String? ?? '';
+      final callType  = pending['callType']   as String? ?? 'audio';
+      final callerName = pending['callerName'] as String? ?? 'Caller';
+      if (callId.isNotEmpty) {
+        state = IncomingCallState(
+          callId:      callId,
+          callerName:  callerName,
+          isVideo:     callType == 'video',
+          isRinging:   true,
+        );
+        _missedTimer?.cancel();
+        _missedTimer = Timer(const Duration(seconds: 30), dismiss);
+      }
+    }
 
     _incomingCb = (data) {
       final callId     = data['callId']   as String? ?? '';

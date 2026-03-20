@@ -26,9 +26,8 @@ dependencies:
   # Real-time
   socket_io_client: ^2.0.3+1
 
-  # WebRTC (peer-to-peer audio/video — no external API)
-  # 1.x supports Flutter 3.22+ and is compatible with livekit_client
-  flutter_webrtc: ^1.3.0
+  # Agora RTC (audio/video calls + live streaming — replaces flutter_webrtc + livekit_client)
+  agora_rtc_engine: ^6.3.2
 
   # UI Components
   cached_network_image: ^3.3.1
@@ -64,9 +63,6 @@ dependencies:
 
   # Deep links (WhatsApp, Email, web URLs)
   url_launcher: ^6.2.6
-
-  # Live Streaming
-  livekit_client: ^2.2.4
 
   # Share (referral)
   share_plus: ^10.0.0

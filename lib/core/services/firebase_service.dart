@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
+import '../providers/incoming_call_provider.dart';
 import '../router/app_router.dart';
 
 // ─── Background message handler (top-level, outside any class) ───────────────
@@ -221,16 +222,45 @@ class FirebaseService {
     debugPrint('[FCM] Notification opened: ${message.data}');
     final type = message.data['type'];
     if (type == 'host_online') {
-      // Navigate to home / discover tab so user can call the host
+      AppRouter.router.go('/home');
+    } else if (type == 'call') {
+      final callId   = message.data['callId']     ?? '';
+      final callType = message.data['callType']   ?? 'audio';
+      // Caller name may be in data (if REST /initiate included it) or in body
+      String callerName = message.data['callerName'] ?? '';
+      if (callerName.isEmpty) {
+        final body = message.notification?.body ?? '';
+        callerName = body.contains(' is calling')
+            ? body.replaceFirst(' is calling you', '')
+            : 'Caller';
+      }
+      if (callId.isNotEmpty) {
+        IncomingCallNotifier.setPendingCall({
+          'callId':      callId,
+          'callType':    callType,
+          'callerName':  callerName,
+        });
+      }
       AppRouter.router.go('/home');
     }
-    // For 'call' type: IncomingCallOverlay / socket events handle it
   }
 
   static void _onLocalNotifTap(NotificationResponse response) {
     debugPrint('[FCM] Local notification tapped: ${response.payload}');
     final payload = response.payload ?? '';
     if (payload.contains('type=host_online')) {
+      AppRouter.router.go('/home');
+    } else if (payload.contains('type=call')) {
+      final params   = Uri.splitQueryString(payload);
+      final callId   = params['callId']   ?? '';
+      final callType = params['callType'] ?? 'audio';
+      if (callId.isNotEmpty) {
+        IncomingCallNotifier.setPendingCall({
+          'callId':     callId,
+          'callType':   callType,
+          'callerName': 'Caller',
+        });
+      }
       AppRouter.router.go('/home');
     }
   }

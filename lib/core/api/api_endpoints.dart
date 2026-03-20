@@ -38,8 +38,8 @@ class ApiEndpoints {
   static const String hostFollowing = '/api/hosts/following';
 
   // Calls
-  static const String iceServers    = '/api/calls/ice-servers';
   static const String callInitiate  = '/api/calls/initiate';
+  static String callAgoraToken(String id) => '/api/calls/$id/agora-token';
   static String callAccept(String id) => '/api/calls/$id/accept';
   static String callEnd(String id) => '/api/calls/$id/end';
   static String callReview(String id) => '/api/calls/$id/review';

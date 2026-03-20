@@ -1,6 +1,6 @@
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:livekit_client/livekit_client.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/socket/socket_service.dart';
@@ -24,15 +24,16 @@ class WatchStreamScreen extends ConsumerStatefulWidget {
 }
 
 class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
-  Room? _room;
-  VideoTrack? _hostVideoTrack;
+  RtcEngine? _engine;
+  String?    _channelName;
+  int?       _hostUid;
   bool _isConnecting = true;
   String? _error;
-  final List<_Comment> _comments = [];
+  final List<_Comment> _comments    = [];
   final _commentCtrl = TextEditingController();
-  int _viewerCount = 0;
+  int _viewerCount   = 0;
 
-  // Socket listener refs for cleanup
+  // Socket listener refs
   MessageCallback? _commentCb;
   MessageCallback? _giftCb;
   MessageCallback? _endedCb;
@@ -55,13 +56,14 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
 
   Future<void> _leaveStream() async {
     try {
-      await _room?.disconnect();
+      await _engine?.leaveChannel();
+      await _engine?.release();
+      _engine = null;
       await ApiClient.dio.post(ApiEndpoints.streamLeave(widget.streamId));
     } catch (_) {}
   }
 
   void _setupSocketListeners() {
-    // Join the socket room so we receive real-time stream events
     SocketService.emit('join_stream', {'streamId': widget.streamId});
 
     _commentCb = (data) {
@@ -105,52 +107,75 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
   }
 
   void _cleanupSocketListeners() {
-    if (_commentCb     != null) { SocketService.off('stream_comment',       _commentCb);     _commentCb     = null; }
-    if (_giftCb        != null) { SocketService.off('stream_gift_received', _giftCb);        _giftCb        = null; }
-    if (_viewerJoinedCb != null){ SocketService.off('viewer_joined',        _viewerJoinedCb);_viewerJoinedCb = null; }
-    if (_endedCb       != null) { SocketService.off('stream_ended',         _endedCb);       _endedCb       = null; }
+    if (_commentCb      != null) { SocketService.off('stream_comment',       _commentCb);      _commentCb      = null; }
+    if (_giftCb         != null) { SocketService.off('stream_gift_received', _giftCb);         _giftCb         = null; }
+    if (_viewerJoinedCb != null) { SocketService.off('viewer_joined',        _viewerJoinedCb); _viewerJoinedCb = null; }
+    if (_endedCb        != null) { SocketService.off('stream_ended',         _endedCb);        _endedCb        = null; }
   }
 
   Future<void> _joinStream() async {
     try {
-      final res = await ApiClient.dio.get(ApiEndpoints.streamToken(widget.streamId));
+      final res  = await ApiClient.dio.get(ApiEndpoints.streamToken(widget.streamId));
       final data = res.data['data'];
-      final token = data['token'] as String;
-      final livekitUrl = data['livekitUrl'] as String;
-      final stream = data['stream'] as Map<String, dynamic>;
 
-      final room = Room();
+      final token       = data['token']       as String;
+      final channelName = data['channelName'] as String;
+      final uid         = (data['uid']   as num).toInt();
+      final hostUid     = (data['hostUid'] as num).toInt();
+      final appId       = data['appId']       as String;
+      final stream      = data['stream']      as Map<String, dynamic>;
 
-      // Listen for published tracks
-      room.addListener(() {
-        for (final participant in room.remoteParticipants.values) {
-          for (final publication in participant.videoTrackPublications) {
-            if (publication.track != null && publication.subscribed) {
-              if (mounted) {
-                setState(() => _hostVideoTrack = publication.track as VideoTrack?);
-              }
-            }
-          }
-        }
-      });
+      _channelName = channelName;
+      _hostUid     = hostUid;
 
-      await room.connect(livekitUrl, token);
+      // Initialize Agora engine as audience
+      final engine = createAgoraRtcEngine();
+      await engine.initialize(RtcEngineContext(appId: appId));
+      await engine.enableVideo();
 
-      // Join socket room for real-time comments, gifts, and stream-end events
+      engine.registerEventHandler(
+        RtcEngineEventHandler(
+          onUserJoined: (connection, remoteUid, elapsed) {
+            debugPrint('[WatchStream] Host joined: $remoteUid');
+            if (mounted) setState(() => _hostUid = remoteUid);
+          },
+          onUserOffline: (connection, remoteUid, reason) {
+            debugPrint('[WatchStream] Host left: $remoteUid');
+          },
+          onError: (err, msg) {
+            debugPrint('[WatchStream] Agora error: $err $msg');
+          },
+        ),
+      );
+
+      await engine.joinChannel(
+        token:     token,
+        channelId: channelName,
+        uid:       uid,
+        options: const ChannelMediaOptions(
+          channelProfile:         ChannelProfileType.channelProfileLiveBroadcasting,
+          clientRoleType:         ClientRoleType.clientRoleAudience,
+          autoSubscribeVideo:     true,
+          autoSubscribeAudio:     true,
+          publishCameraTrack:     false,
+          publishMicrophoneTrack: false,
+        ),
+      );
+
       _setupSocketListeners();
 
       if (mounted) {
         setState(() {
-          _room = room;
-          _isConnecting = false;
-          _viewerCount = (stream['viewer_count'] as num?)?.toInt() ?? 0;
+          _engine        = engine;
+          _isConnecting  = false;
+          _viewerCount   = (stream['viewer_count'] as num?)?.toInt() ?? 0;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isConnecting = false;
-          _error = 'Failed to join stream: $e';
+          _error        = 'Failed to join stream: $e';
         });
       }
     }
@@ -159,12 +184,10 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
   void _sendComment(String text) {
     if (text.trim().isEmpty) return;
     _commentCtrl.clear();
-    // Emit to socket — server relays to all viewers and the host
     SocketService.emit('stream_comment', {
       'streamId': widget.streamId,
       'text': text.trim(),
     });
-    // Show own comment immediately (don't wait for server echo)
     setState(() {
       _comments.add(_Comment(name: 'You', text: text.trim()));
       if (_comments.length > 50) _comments.removeAt(0);
@@ -202,8 +225,8 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
             children: [
               CircularProgressIndicator(color: Colors.white),
               SizedBox(height: 16),
-              Text('Joining stream...', style: TextStyle(color: Colors.white70,
-                  fontFamily: 'Poppins')),
+              Text('Joining stream...',
+                  style: TextStyle(color: Colors.white70, fontFamily: 'Poppins')),
             ],
           ),
         ),
@@ -220,8 +243,7 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
             children: [
               const Icon(Icons.error_outline_rounded, color: AppColors.callRed, size: 48),
               const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center,
-                  style: AppTextStyles.bodyMedium),
+              Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -237,9 +259,17 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Video
-          if (_hostVideoTrack != null)
-            Positioned.fill(child: VideoTrackRenderer(_hostVideoTrack!))
+          // Host video (full screen)
+          if (_engine != null && _hostUid != null && _channelName != null)
+            Positioned.fill(
+              child: AgoraVideoView(
+                controller: VideoViewController.remote(
+                  rtcEngine: _engine!,
+                  canvas: VideoCanvas(uid: _hostUid!),
+                  connection: RtcConnection(channelId: _channelName!),
+                ),
+              ),
+            )
           else
             const Positioned.fill(
               child: ColoredBox(
@@ -267,14 +297,12 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
-                      width: 36,
-                      height: 36,
+                      width: 36, height: 36,
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.arrow_back_rounded,
-                          color: Colors.white, size: 20),
+                      child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -284,8 +312,7 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                       children: [
                         Text(widget.hostName,
                             style: const TextStyle(color: Colors.white,
-                                fontWeight: FontWeight.w700, fontSize: 14,
-                                fontFamily: 'Poppins')),
+                                fontWeight: FontWeight.w700, fontSize: 14, fontFamily: 'Poppins')),
                         Text(widget.title,
                             style: const TextStyle(color: Colors.white70, fontSize: 12,
                                 fontFamily: 'Poppins'),
@@ -299,8 +326,9 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                       color: AppColors.callRed,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text('LIVE', style: TextStyle(color: Colors.white,
-                        fontWeight: FontWeight.w800, fontSize: 11, fontFamily: 'Poppins')),
+                    child: const Text('LIVE',
+                        style: TextStyle(color: Colors.white,
+                            fontWeight: FontWeight.w800, fontSize: 11, fontFamily: 'Poppins')),
                   ),
                   const SizedBox(width: 8),
                   Container(
@@ -311,8 +339,7 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.remove_red_eye_rounded,
-                            color: Colors.white70, size: 14),
+                        const Icon(Icons.remove_red_eye_rounded, color: Colors.white70, size: 14),
                         const SizedBox(width: 4),
                         Text('$_viewerCount',
                             style: const TextStyle(color: Colors.white,
@@ -327,9 +354,7 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
 
           // Comments list
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 90,
+            left: 0, right: 0, bottom: 90,
             child: SizedBox(
               height: 200,
               child: ListView.builder(
@@ -351,8 +376,8 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 12),
                           children: [
                             TextSpan(text: '${c.name}  ',
-                                style: const TextStyle(color: AppColors.primary,
-                                    fontWeight: FontWeight.w700)),
+                                style: const TextStyle(
+                                    color: AppColors.primary, fontWeight: FontWeight.w700)),
                             TextSpan(text: c.text,
                                 style: const TextStyle(color: Colors.white)),
                           ],
@@ -367,16 +392,14 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
 
           // Bottom input bar
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
+            left: 0, right: 0, bottom: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
                   12, 10, 12, MediaQuery.of(context).viewInsets.bottom + 16),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
+                  end:   Alignment.topCenter,
                   colors: [Colors.black87, Colors.transparent],
                 ),
               ),
@@ -409,8 +432,7 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                   GestureDetector(
                     onTap: () => _sendComment(_commentCtrl.text),
                     child: Container(
-                      width: 44,
-                      height: 44,
+                      width: 44, height: 44,
                       decoration: const BoxDecoration(
                         color: AppColors.primary,
                         shape: BoxShape.circle,
@@ -422,15 +444,13 @@ class _WatchStreamScreenState extends ConsumerState<WatchStreamScreen> {
                   GestureDetector(
                     onTap: _showGiftPicker,
                     child: Container(
-                      width: 44,
-                      height: 44,
+                      width: 44, height: 44,
                       decoration: BoxDecoration(
                         color: Colors.orange.withValues(alpha: 0.8),
                         shape: BoxShape.circle,
                       ),
                       child: const Text('🎁',
-                          style: TextStyle(fontSize: 20),
-                          textAlign: TextAlign.center),
+                          style: TextStyle(fontSize: 20), textAlign: TextAlign.center),
                     ),
                   ),
                 ],
@@ -474,7 +494,7 @@ class _GiftPickerState extends State<_GiftPicker> {
     try {
       final res = await ApiClient.dio.get(ApiEndpoints.gifts);
       setState(() {
-        _gifts = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
+        _gifts   = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
         _loading = false;
       });
     } catch (_) {
@@ -484,11 +504,9 @@ class _GiftPickerState extends State<_GiftPicker> {
 
   Future<void> _sendGift(Map<String, dynamic> gift) async {
     Navigator.of(context).pop();
-    // Emit stream_gift via socket — server deducts coins, credits host (65%),
-    // increments gift_count, and broadcasts stream_gift_received to the room.
     SocketService.emit('stream_gift', {
       'streamId': widget.streamId,
-      'giftId': gift['id'],
+      'giftId':   gift['id'],
     });
     widget.onGiftSent(gift['name'] as String? ?? 'Gift');
   }

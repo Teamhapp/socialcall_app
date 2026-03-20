@@ -1,14 +1,14 @@
 import 'dart:async';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/services/call_notification_service.dart';
-import '../../../core/services/webrtc_service.dart';
+import '../../../core/services/agora_call_service.dart';
 import '../../../core/socket/socket_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -41,39 +41,36 @@ class _CallScreenState extends ConsumerState<CallScreen>
   bool _isSpeakerOn   = true;
   bool _isCameraOff   = false;
   bool _isFrontCamera = true;
-  bool _lowBalance    = false;  // show warning banner when < 1 min left
+  bool _lowBalance    = false;
   CallStatus _status  = CallStatus.connecting;
 
   // ── Timers ───────────────────────────────────────────────────────────────────
   int    _seconds   = 0;
-  Timer? _callTimer;   // per-second billing ticker
-  Timer? _ringTimer;   // 45-s ringing timeout → auto-cancel if no answer
+  Timer? _callTimer;
+  Timer? _ringTimer;
 
   // ── Wallet ───────────────────────────────────────────────────────────────────
   double _initialWalletBalance = 0;
 
   // ── Call lifecycle guard ─────────────────────────────────────────────────────
-  /// Prevents double-ending the call (e.g. our own call_ended + backend echo).
   bool _callEndedByUs = false;
 
   // ── Gift overlay ─────────────────────────────────────────────────────────────
-  /// Shown when the caller sends a gift during the call (host sees this).
   String? _giftOverlayText;
-  Timer? _giftOverlayTimer;
+  Timer?  _giftOverlayTimer;
 
-  // ── WebRTC & socket callbacks ─────────────────────────────────────────────────
-  final _webrtc = WebRTCService();
+  // ── Agora & socket callbacks ──────────────────────────────────────────────────
+  final _agora = AgoraCallService();
   MessageCallback? _callConnectedCb;
   MessageCallback? _callRejectedCb;
   MessageCallback? _callSummaryCb;
-  MessageCallback? _walletWarnCb;   // server-side low-balance warning
-  MessageCallback? _giftReceivedCb; // real-time gift notification
+  MessageCallback? _walletWarnCb;
+  MessageCallback? _giftReceivedCb;
 
-  // Completer that resolves once _webrtc.initialize() + ICE fetch are done.
-  // call_connected listener is registered in initState() (synchronous) and
-  // awaits this completer so it never starts WebRTC before it is ready,
-  // but also never misses the event because the listener is registered first.
-  final Completer<List<Map<String, dynamic>>?> _webrtcReadyCompleter = Completer();
+  // Completer resolves once Agora creds are fetched; the call_connected
+  // listener (registered synchronously in initState) awaits this so it
+  // never misses the event even if the host accepts before the API returns.
+  final Completer<Map<String, dynamic>?> _agoraCredsCompleter = Completer();
 
   // ── Animations ───────────────────────────────────────────────────────────────
   late AnimationController _pulseController;
@@ -101,17 +98,12 @@ class _CallScreenState extends ConsumerState<CallScreen>
   void initState() {
     super.initState();
 
-    // Register lifecycle observer so we can handle background → foreground.
     WidgetsBinding.instance.addObserver(this);
-
-    // Keep screen on during call (WAKE_LOCK permission required in manifest).
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    // Snapshot wallet balance at call start for depletion checks.
     _initialWalletBalance =
         ref.read(authProvider).user?.walletBalance ?? 0.0;
 
-    // Pulse animation used while connecting.
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -119,34 +111,26 @@ class _CallScreenState extends ConsumerState<CallScreen>
     _pulseAnimation =
         Tween<double>(begin: 0.9, end: 1.1).animate(_pulseController);
 
-    // Auto-cancel the call if the host never answers within 45 seconds.
     _ringTimer = Timer(const Duration(seconds: 45), _onRingingTimeout);
 
-    // Register call_connected listener SYNCHRONOUSLY here — before any async
-    // work — so the event is never missed even if the host accepts within
-    // milliseconds of the caller navigating to this screen.
-    // The callback awaits _webrtcReadyCompleter so it never calls start()
-    // before initialize() + ICE fetch are done.
+    // Register call_connected SYNCHRONOUSLY so it is never missed even if
+    // the host accepts before _initAgora() finishes fetching the token.
     if (widget.isCaller) {
       _callConnectedCb = (data) async {
         debugPrint('[CallScreen] call_connected received: $data');
-        if (data['callId'] != widget.callId) {
-          debugPrint('[CallScreen] call_connected ignored — wrong callId');
-          return;
-        }
-        // Wait until initialize() + ICE fetch complete (may already be done).
-        final iceServers = await _webrtcReadyCompleter.future;
-        if (!mounted) return;
-        debugPrint('[CallScreen] CALLER starting WebRTC (iceServers=${iceServers?.length ?? 'null'})');
+        if (data['callId'] != widget.callId) return;
+        final creds = await _agoraCredsCompleter.future;
+        if (!mounted || creds == null) return;
+        debugPrint('[CallScreen] CALLER joining Agora channel');
         try {
-          await _webrtc.start(
-            callId:     widget.callId,
-            isCaller:   true,
-            isVideo:    widget.isVideo,
-            iceServers: iceServers,
+          await _agora.start(
+            token:       creds['token'] as String,
+            channelName: creds['channelName'] as String,
+            uid:         (creds['uid'] as num).toInt(),
+            isVideo:     widget.isVideo,
           );
         } catch (e) {
-          debugPrint('[CallScreen] CALLER _webrtc.start() failed: $e');
+          debugPrint('[CallScreen] CALLER _agora.start() failed: $e');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Could not start call: $e')),
@@ -155,27 +139,20 @@ class _CallScreenState extends ConsumerState<CallScreen>
           }
           return;
         }
-        debugPrint('[CallScreen] CALLER WebRTC started');
         if (mounted) setState(() {});
       };
       SocketService.on('call_connected', _callConnectedCb!);
     }
 
-    _initWebRTC();
+    _initAgora();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App came back to foreground — make sure socket is live.
-      if (!SocketService.isConnected) {
-        SocketService.connect();
-      }
-      // Restore immersive mode (Android notification bar dismissal resets it).
+      if (!SocketService.isConnected) SocketService.connect();
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else if (state == AppLifecycleState.paused) {
-      // App went to background — foreground service keeps process alive,
-      // but restore normal UI mode so status bar shows in other apps.
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   }
@@ -185,94 +162,48 @@ class _CallScreenState extends ConsumerState<CallScreen>
     _callTimer?.cancel();
     _ringTimer?.cancel();
     _pulseController.dispose();
-    CallNotificationService.dismiss(); // always clean up background notification
-    if (_callConnectedCb != null) {
-      SocketService.off('call_connected', _callConnectedCb);
-    }
-    if (_callRejectedCb != null) {
-      SocketService.off('call_rejected', _callRejectedCb);
-    }
-    if (_callSummaryCb != null) {
-      SocketService.off('call_summary', _callSummaryCb);
-    }
-    if (_walletWarnCb != null) {
-      SocketService.off('wallet_low_warning', _walletWarnCb);
-    }
-    if (_giftReceivedCb != null) {
-      SocketService.off('gift_received', _giftReceivedCb);
-    }
+    CallNotificationService.dismiss();
+    if (_callConnectedCb != null) SocketService.off('call_connected', _callConnectedCb);
+    if (_callRejectedCb  != null) SocketService.off('call_rejected',  _callRejectedCb);
+    if (_callSummaryCb   != null) SocketService.off('call_summary',   _callSummaryCb);
+    if (_walletWarnCb    != null) SocketService.off('wallet_low_warning', _walletWarnCb);
+    if (_giftReceivedCb  != null) SocketService.off('gift_received',  _giftReceivedCb);
     _giftOverlayTimer?.cancel();
-    _webrtc.dispose();
+    _agora.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    // Restore normal UI mode after leaving the call screen.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // WebRTC initialisation + socket event wiring
+  // Agora initialisation
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /// Fetches ICE server list from backend (includes TURN if configured).
-  /// Falls back to hardcoded defaults on any error so calls still work.
-  Future<List<Map<String, dynamic>>?> _fetchIceServers() async {
-    try {
-      final resp = await ApiClient.dio.get(ApiEndpoints.iceServers);
-      final raw = ApiClient.parseData(resp) as List?;
-      debugPrint('[CallScreen] ICE servers from backend: $raw');
-      return raw?.cast<Map<String, dynamic>>();
-    } catch (e) {
-      debugPrint('[CallScreen] ICE server fetch failed: $e — using defaults');
-      return null; // WebRTCService will use built-in defaults
-    }
-  }
+  Future<void> _initAgora() async {
+    debugPrint('[CallScreen] _initAgora() — isCaller=${widget.isCaller} callId=${widget.callId}');
 
-  Future<void> _initWebRTC() async {
-    debugPrint('[CallScreen] _initWebRTC() — isCaller=${widget.isCaller} callId=${widget.callId} isVideo=${widget.isVideo}');
-    try {
-      await _webrtc.initialize();
-    } catch (e) {
-      debugPrint('[CallScreen] Renderer init failed: $e');
-      // Always complete the completer so the call_connected listener never hangs.
-      if (!_webrtcReadyCompleter.isCompleted) {
-        _webrtcReadyCompleter.complete(null);
-      }
-      return;
-    }
-    debugPrint('[CallScreen] WebRTC renderers initialized');
-
-    // ── P2P connection established ─────────────────────────────────────────────
-    _webrtc.onConnected = () {
+    // ── Agora callbacks ────────────────────────────────────────────────────────
+    _agora.onConnected = () {
       if (!mounted) return;
-      _ringTimer?.cancel(); // host answered — no more timeout needed
+      _ringTimer?.cancel();
       setState(() => _status = CallStatus.connected);
-
-      // Apply the initial speaker state — Android WebRTC defaults to earpiece,
-      // but our UI defaults to speaker-on, so we must explicitly activate it.
-      _webrtc.setSpeaker(_isSpeakerOn);
-
-      // Start per-second billing ticker with wallet check every 10 s.
+      _agora.setSpeaker(_isSpeakerOn);
       _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
         setState(() => _seconds++);
         if (_seconds % 10 == 0) _checkWallet();
       });
-
-      // Show persistent background notification so the user can return.
       CallNotificationService.showOngoingCall(
         hostName: widget.host.name,
         isVideo:  widget.isVideo,
       );
     };
 
-    // ── P2P connection failed ──────────────────────────────────────────────────
-    _webrtc.onConnectionFailed = () {
+    _agora.onConnectionFailed = () {
       if (!mounted || _callEndedByUs) return;
       _callEndedByUs = true;
       _cleanupTimers();
       CallNotificationService.dismiss();
-      // Tell backend to end the call — otherwise it stays 'connected' in the DB,
-      // server-side wallet billing keeps running, and the user can't start a new call.
       SocketService.emit('call_ended', {'callId': widget.callId});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -285,34 +216,64 @@ class _CallScreenState extends ConsumerState<CallScreen>
       }
     };
 
-    // ── Remote stream ready ────────────────────────────────────────────────────
-    _webrtc.onRemoteStreamReady = () {
+    _agora.onRemoteStreamReady = () {
       if (mounted) setState(() {});
     };
 
-    // Fetch ICE servers then signal the completer so the call_connected
-    // callback (registered synchronously in initState) can proceed.
-    debugPrint('[CallScreen] Fetching ICE servers...');
-    final iceServers = await _fetchIceServers();
-    debugPrint('[CallScreen] ICE servers: ${iceServers?.length ?? 'null (using defaults)'}');
-
-    // Unblock the call_connected listener (caller side).
-    if (!_webrtcReadyCompleter.isCompleted) {
-      _webrtcReadyCompleter.complete(iceServers);
+    // ── Fetch Agora token ──────────────────────────────────────────────────────
+    Map<String, dynamic>? creds;
+    try {
+      final resp = await ApiClient.dio.get(ApiEndpoints.callAgoraToken(widget.callId));
+      creds = ApiClient.parseData(resp) as Map<String, dynamic>?;
+      debugPrint('[CallScreen] Agora creds: channel=${creds?['channelName']} uid=${creds?['uid']}');
+    } catch (e) {
+      debugPrint('[CallScreen] Agora token fetch failed: $e');
+      if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start call: $e')),
+        );
+        context.go('/home');
+      }
+      return;
     }
 
+    if (creds == null) {
+      if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(null);
+      if (mounted) context.go('/home');
+      return;
+    }
+
+    // ── Initialize Agora engine ────────────────────────────────────────────────
+    try {
+      await _agora.initialize(creds['appId'] as String);
+    } catch (e) {
+      debugPrint('[CallScreen] Agora initialize failed: $e');
+      if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start call: $e')),
+        );
+        context.go('/home');
+      }
+      return;
+    }
+
+    // Unblock the call_connected listener (caller side).
+    if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(creds);
+
     if (!widget.isCaller) {
-      // Host (receiver): start WebRTC immediately after accepting.
-      debugPrint('[CallScreen] HOST — starting WebRTC immediately');
+      // Host: join channel immediately after accepting.
+      debugPrint('[CallScreen] HOST joining Agora channel');
       try {
-        await _webrtc.start(
-          callId:     widget.callId,
-          isCaller:   false,
-          isVideo:    widget.isVideo,
-          iceServers: iceServers,
+        await _agora.start(
+          token:       creds['token'] as String,
+          channelName: creds['channelName'] as String,
+          uid:         (creds['uid'] as num).toInt(),
+          isVideo:     widget.isVideo,
         );
       } catch (e) {
-        debugPrint('[CallScreen] HOST _webrtc.start() failed: $e');
+        debugPrint('[CallScreen] HOST _agora.start() failed: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Could not start call: $e')),
@@ -321,11 +282,11 @@ class _CallScreenState extends ConsumerState<CallScreen>
         }
         return;
       }
-      debugPrint('[CallScreen] HOST WebRTC started, waiting for offer');
       if (mounted) setState(() {});
     }
 
-    // ── Host rejected the call ────────────────────────────────────────────────
+    // ── Remaining socket listeners ─────────────────────────────────────────────
+
     _callRejectedCb = (data) {
       if ((data['callId'] as String?) != widget.callId) return;
       _cleanupTimers();
@@ -338,29 +299,26 @@ class _CallScreenState extends ConsumerState<CallScreen>
     };
     SocketService.on('call_rejected', _callRejectedCb!);
 
-    // ── Server-side low-balance warning (authoritative — uses real DB balance) ─
     _walletWarnCb = (data) {
       if ((data['callId'] as String?) != widget.callId) return;
       if (mounted && !_lowBalance) setState(() => _lowBalance = true);
     };
     SocketService.on('wallet_low_warning', _walletWarnCb!);
 
-    // ── Backend billing result — call ended by either party ───────────────────
     _callSummaryCb = (data) {
       if ((data['callId'] as String?) != widget.callId) return;
-      // If we initiated the end, we already showed our own summary — ignore echo.
       if (_callEndedByUs) return;
-
       _cleanupTimers();
       CallNotificationService.dismiss();
       ref.read(authProvider.notifier).refreshBalance();
-
-      final dSec     = data['durationSeconds'] as int?   ?? _seconds;
+      final dSec       = data['durationSeconds'] as int? ?? _seconds;
       final rawCharged = data['amountCharged'];
-      final charged = rawCharged == null ? _cost
-          : (rawCharged is num ? rawCharged.toDouble() : double.tryParse(rawCharged.toString()) ?? _cost);
-      final autoEnded = data['autoEnded'] as bool? ?? false;
-
+      final charged    = rawCharged == null
+          ? _cost
+          : (rawCharged is num
+              ? rawCharged.toDouble()
+              : double.tryParse(rawCharged.toString()) ?? _cost);
+      final autoEnded  = data['autoEnded'] as bool? ?? false;
       if (mounted) {
         _showSummarySheet(
           duration:  _formatSeconds(dSec),
@@ -371,7 +329,6 @@ class _CallScreenState extends ConsumerState<CallScreen>
     };
     SocketService.on('call_summary', _callSummaryCb!);
 
-    // ── Gift received (shown to host during live call) ─────────────────────────
     _giftReceivedCb = (data) {
       final emoji  = (data['gift'] as Map?)?['emoji'] as String? ?? '🎁';
       final name   = (data['gift'] as Map?)?['name']  as String? ?? 'Gift';
@@ -387,29 +344,25 @@ class _CallScreenState extends ConsumerState<CallScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Wallet depletion check (every 10 s while call is running)
+  // Wallet check
   // ─────────────────────────────────────────────────────────────────────────────
 
   void _checkWallet() {
     if (!mounted || _callEndedByUs) return;
     final remaining = _initialWalletBalance - _cost;
-
     if (remaining <= 0) {
       _endCallInternal(reason: 'wallet_depleted');
     } else if (remaining < _ratePerMin && !_lowBalance) {
-      // < 1 minute of funds left → show banner.
       setState(() => _lowBalance = true);
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Ringing timeout — fires at 45 s if host never answered
+  // Ringing timeout
   // ─────────────────────────────────────────────────────────────────────────────
 
   void _onRingingTimeout() {
     if (_status != CallStatus.connecting || !mounted) return;
-    // Emit call_ended: backend bills 0 (never connected) and notifies host
-    // via call_cancelled so the incoming-call overlay dismisses.
     SocketService.emit('call_ended', {'callId': widget.callId});
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -420,25 +373,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // End-call paths
+  // End-call
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /// User pressed the red button.
   void _endCall() => _endCallInternal();
 
-  /// Shared termination logic — safe to call from any path exactly once.
   void _endCallInternal({String reason = ''}) {
     if (_callEndedByUs) return;
     _callEndedByUs = true;
-
     _cleanupTimers();
     CallNotificationService.dismiss();
-
-    // Tell the backend: it bills and emits call_summary to both parties.
-    // We'll ignore that echo because _callEndedByUs is now true.
     SocketService.emit('call_ended', {'callId': widget.callId});
     ref.read(authProvider.notifier).refreshBalance();
-
     if (mounted) {
       _showSummarySheet(
         duration:  _timeDisplay,
@@ -456,7 +402,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Call summary bottom sheet
+  // Summary + rating sheets
   // ─────────────────────────────────────────────────────────────────────────────
 
   void _showSummarySheet({
@@ -485,35 +431,23 @@ class _CallScreenState extends ConsumerState<CallScreen>
               ),
             ),
             const SizedBox(height: 20),
-
             if (autoEnded) ...[
               const Icon(Icons.account_balance_wallet_outlined,
                   color: AppColors.warning, size: 32),
               const SizedBox(height: 8),
-              Text(
-                'Balance depleted',
-                style: AppTextStyles.headingSmall
-                    .copyWith(color: AppColors.warning),
-              ),
+              Text('Balance depleted',
+                  style: AppTextStyles.headingSmall.copyWith(color: AppColors.warning)),
               const SizedBox(height: 12),
             ],
-
             Text('Call Summary', style: AppTextStyles.headingMedium),
             const SizedBox(height: 20),
-
             _SummaryRow('Duration', duration),
             _SummaryRow('Rate', '₹${_ratePerMin.toInt()}/min'),
-            _SummaryRow(
-              'Total Charged',
-              '₹${cost.toStringAsFixed(2)}',
-              highlight: true,
-            ),
+            _SummaryRow('Total Charged', '₹${cost.toStringAsFixed(2)}', highlight: true),
             const SizedBox(height: 24),
-
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Show rating sheet for callers after a real call
                 if (widget.isCaller && _seconds > 0) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) _showRatingSheet();
@@ -531,10 +465,6 @@ class _CallScreenState extends ConsumerState<CallScreen>
       ),
     );
   }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Post-call rating sheet (callers only)
-  // ─────────────────────────────────────────────────────────────────────────────
 
   void _showRatingSheet() {
     double rating = 0;
@@ -564,11 +494,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 ),
               ),
               const SizedBox(height: 20),
-              const Icon(Icons.star_rounded,
-                  color: AppColors.gold, size: 36),
+              const Icon(Icons.star_rounded, color: AppColors.gold, size: 36),
               const SizedBox(height: 12),
-              Text('Rate Your Call',
-                  style: AppTextStyles.headingMedium),
+              Text('Rate Your Call', style: AppTextStyles.headingMedium),
               const SizedBox(height: 6),
               Text(
                 'How was your call with ${widget.host.name}?',
@@ -582,13 +510,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 direction: Axis.horizontal,
                 allowHalfRating: false,
                 itemCount: 5,
-                itemPadding:
-                    const EdgeInsets.symmetric(horizontal: 6),
-                itemBuilder: (_, _) => const Icon(
-                    Icons.star_rounded,
-                    color: AppColors.gold),
-                onRatingUpdate: (r) =>
-                    setSheetState(() => rating = r),
+                itemPadding: const EdgeInsets.symmetric(horizontal: 6),
+                itemBuilder: (_, _) =>
+                    const Icon(Icons.star_rounded, color: AppColors.gold),
+                onRatingUpdate: (r) => setSheetState(() => rating = r),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -609,13 +534,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
                         if (mounted) context.go('/home');
                       },
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.border),
+                        side: const BorderSide(color: AppColors.border),
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14),
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Skip'),
                     ),
@@ -629,28 +551,20 @@ class _CallScreenState extends ConsumerState<CallScreen>
                               Navigator.pop(sheetCtx);
                               try {
                                 await ApiClient.dio.post(
-                                  ApiEndpoints.callReview(
-                                      widget.callId),
+                                  ApiEndpoints.callReview(widget.callId),
                                   data: {
                                     'rating': rating.toInt(),
-                                    if (commentCtrl.text
-                                        .trim()
-                                        .isNotEmpty)
-                                      'comment': commentCtrl.text
-                                          .trim(),
+                                    if (commentCtrl.text.trim().isNotEmpty)
+                                      'comment': commentCtrl.text.trim(),
                                   },
                                 );
-                              } catch (_) {
-                                // rating is best-effort — never block navigation
-                              }
+                              } catch (_) {}
                               if (mounted) context.go('/home');
                             },
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14),
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Submit'),
                     ),
@@ -672,25 +586,20 @@ class _CallScreenState extends ConsumerState<CallScreen>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // Intercept the hardware/gesture back button during a call.
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // While the call is still ringing or connecting, back = cancel.
         if (_status != CallStatus.connected) {
           _endCall();
           return;
         }
-        // While connected, show a confirmation dialog.
         _showEndCallConfirm();
       },
       child: Scaffold(
         body: Stack(
           children: [
             widget.isVideo ? _buildVideoUI() : _buildAudioUI(),
-            // Low-balance warning banner (floats above everything).
             if (_lowBalance) _buildLowBalanceBanner(),
-            // Gift received floating toast (host sees this during call).
             if (_giftOverlayText != null) _buildGiftToast(),
           ],
         ),
@@ -719,8 +628,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.callRed,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('End Call'),
           ),
@@ -730,8 +638,6 @@ class _CallScreenState extends ConsumerState<CallScreen>
     if (end == true) _endCall();
   }
 
-  // ── Gift received toast ───────────────────────────────────────────────────
-
   Widget _buildGiftToast() {
     return Positioned(
       bottom: 120, left: 0, right: 0,
@@ -740,8 +646,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
           opacity: _giftOverlayText != null ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
           child: Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: AppColors.gold.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(30),
@@ -768,8 +673,6 @@ class _CallScreenState extends ConsumerState<CallScreen>
     );
   }
 
-  // ── Low-balance banner ────────────────────────────────────────────────────
-
   Widget _buildLowBalanceBanner() {
     final remaining = _initialWalletBalance - _cost;
     final minsLeft  = remaining / _ratePerMin;
@@ -781,8 +684,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded,
-                  color: Colors.white, size: 18),
+              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -803,41 +705,52 @@ class _CallScreenState extends ConsumerState<CallScreen>
   // ── Video UI ──────────────────────────────────────────────────────────────
 
   Widget _buildVideoUI() {
+    final engine      = _agora.engine;
+    final remoteUid   = _agora.remoteUid;
+    final channelName = _agora.channelName;
+
     return Stack(
       children: [
+        // Remote video (full-screen)
         Positioned.fill(
-          child: _status == CallStatus.connected
-              ? RTCVideoView(
-                  _webrtc.remoteRenderer,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          child: _status == CallStatus.connected &&
+                  engine != null &&
+                  remoteUid != null &&
+                  channelName != null
+              ? AgoraVideoView(
+                  controller: VideoViewController.remote(
+                    rtcEngine: engine,
+                    canvas: VideoCanvas(uid: remoteUid),
+                    connection: RtcConnection(channelId: channelName),
+                  ),
                 )
               : Container(
                   color: const Color(0xFF1A1A2E),
                   child: const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.primary),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 ),
         ),
 
-        if (_status == CallStatus.connected && !_isCameraOff)
+        // Local preview (picture-in-picture)
+        if (_status == CallStatus.connected && !_isCameraOff && engine != null)
           Positioned(
             top: 60, right: 16,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
                 width: 100, height: 140,
-                child: RTCVideoView(
-                  _webrtc.localRenderer,
-                  mirror: _isFrontCamera,
-                  objectFit:
-                      RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                child: AgoraVideoView(
+                  controller: VideoViewController(
+                    rtcEngine: engine,
+                    canvas: const VideoCanvas(uid: 0), // 0 = local
+                  ),
                 ),
               ),
             ),
           ),
 
+        // Connecting overlay
         if (_status == CallStatus.connecting)
           Positioned.fill(
             child: Container(
@@ -857,21 +770,18 @@ class _CallScreenState extends ConsumerState<CallScreen>
                         : null,
                   ),
                   const SizedBox(height: 16),
-                  Text(widget.host.name,
-                      style: AppTextStyles.headingLarge),
+                  Text(widget.host.name, style: AppTextStyles.headingLarge),
                   const SizedBox(height: 8),
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: 12, height: 12,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primary),
+                            strokeWidth: 2, color: AppColors.primary),
                       ),
-                      const SizedBox(width: 8),
-                      Text('Connecting...',
-                          style: AppTextStyles.bodyMedium),
+                      SizedBox(width: 8),
+                      Text('Connecting...'),
                     ],
                   ),
                 ],
@@ -879,6 +789,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
             ),
           ),
 
+        // Bottom controls
         Positioned(
           bottom: 0, left: 0, right: 0,
           child: SafeArea(
@@ -886,8 +797,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
               children: [
                 if (_status == CallStatus.connected)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
                       color: Colors.black45,
@@ -895,25 +805,21 @@ class _CallScreenState extends ConsumerState<CallScreen>
                     ),
                     child: Text(
                       '$_timeDisplay  •  ₹${_cost.toStringAsFixed(2)}',
-                      style: AppTextStyles.labelMedium
-                          .copyWith(color: Colors.white),
+                      style: AppTextStyles.labelMedium.copyWith(color: Colors.white),
                     ),
                   ),
 
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _ControlButton(
-                        icon: _isMuted
-                            ? Icons.mic_off_rounded
-                            : Icons.mic_rounded,
+                        icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
                         label: _isMuted ? 'Unmute' : 'Mute',
                         isActive: _isMuted,
                         onTap: () {
-                          _webrtc.setMuted(!_isMuted);
+                          _agora.setMuted(!_isMuted);
                           setState(() => _isMuted = !_isMuted);
                         },
                       ),
@@ -924,9 +830,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
                         label: 'Camera',
                         isActive: _isCameraOff,
                         onTap: () {
-                          _webrtc.setCameraEnabled(_isCameraOff);
-                          setState(
-                              () => _isCameraOff = !_isCameraOff);
+                          _agora.setCameraEnabled(_isCameraOff);
+                          setState(() => _isCameraOff = !_isCameraOff);
                         },
                       ),
                       _ControlButton(
@@ -934,9 +839,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
                         label: 'Flip',
                         isActive: false,
                         onTap: () async {
-                          await _webrtc.switchCamera();
-                          setState(() =>
-                              _isFrontCamera = !_isFrontCamera);
+                          await _agora.switchCamera();
+                          setState(() => _isFrontCamera = !_isFrontCamera);
                         },
                       ),
                       if (widget.isCaller)
@@ -946,7 +850,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                           isActive: false,
                           onTap: () => GiftPickerSheet.show(
                             context, ref,
-                            hostId: widget.host.id,
+                            hostId:   widget.host.id,
                             hostName: widget.host.name,
                           ),
                         ),
@@ -971,8 +875,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.call_end_rounded,
-                        color: Colors.white, size: 30),
+                    child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 30),
                   ),
                 ),
 
@@ -1005,8 +908,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
             const SizedBox(height: 20),
 
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
@@ -1014,14 +916,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.call_rounded,
-                      color: Colors.white, size: 16),
+                  const Icon(Icons.call_rounded, color: Colors.white, size: 16),
                   const SizedBox(width: 6),
-                  Text(
-                    'Audio Call',
-                    style: AppTextStyles.labelMedium
-                        .copyWith(color: Colors.white),
-                  ),
+                  Text('Audio Call',
+                      style: AppTextStyles.labelMedium.copyWith(color: Colors.white)),
                 ],
               ),
             ),
@@ -1037,8 +935,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.5),
-                      width: 3),
+                      color: AppColors.primary.withValues(alpha: 0.5), width: 3),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withValues(alpha: 0.3),
@@ -1066,50 +963,43 @@ class _CallScreenState extends ConsumerState<CallScreen>
             const SizedBox(height: 8),
 
             if (_status == CallStatus.connecting)
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 12, height: 12,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary),
+                        strokeWidth: 2, color: AppColors.primary),
                   ),
-                  const SizedBox(width: 8),
-                  Text('Connecting...',
-                      style: AppTextStyles.bodyMedium),
+                  SizedBox(width: 8),
+                  Text('Connecting...'),
                 ],
               )
             else ...[
               Text(
                 _timeDisplay,
-                style: AppTextStyles.headingLarge
-                    .copyWith(color: AppColors.online),
+                style: AppTextStyles.headingLarge.copyWith(color: AppColors.online),
               ),
               const SizedBox(height: 6),
               Text(
                 '₹${_cost.toStringAsFixed(2)} charged  •  ₹${_ratePerMin.toInt()}/min',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
               ),
             ],
 
             const Spacer(),
 
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _ControlButton(
-                    icon: _isMuted
-                        ? Icons.mic_off_rounded
-                        : Icons.mic_rounded,
+                    icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
                     label: _isMuted ? 'Unmute' : 'Mute',
                     isActive: _isMuted,
                     onTap: () {
-                      _webrtc.setMuted(!_isMuted);
+                      _agora.setMuted(!_isMuted);
                       setState(() => _isMuted = !_isMuted);
                     },
                   ),
@@ -1120,12 +1010,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
                     label: 'Speaker',
                     isActive: !_isSpeakerOn,
                     onTap: () {
-                      _webrtc.setSpeaker(!_isSpeakerOn);
-                      setState(
-                          () => _isSpeakerOn = !_isSpeakerOn);
+                      _agora.setSpeaker(!_isSpeakerOn);
+                      setState(() => _isSpeakerOn = !_isSpeakerOn);
                     },
                   ),
-                  // Gift button — only callers send gifts to the host
                   if (widget.isCaller)
                     _ControlButton(
                       icon: Icons.card_giftcard_rounded,
@@ -1133,7 +1021,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                       isActive: false,
                       onTap: () => GiftPickerSheet.show(
                         context, ref,
-                        hostId: widget.host.id,
+                        hostId:   widget.host.id,
                         hostName: widget.host.name,
                       ),
                     ),
@@ -1158,8 +1046,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
                     ),
                   ],
                 ),
-                child: const Icon(Icons.call_end_rounded,
-                    color: Colors.white, size: 30),
+                child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 30),
               ),
             ),
 
@@ -1171,7 +1058,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
   }
 }
 
-// ── Reusable widgets ─────────────────────────────────────────────────────────
+// ── Reusable widgets ──────────────────────────────────────────────────────────
 
 class _ControlButton extends StatelessWidget {
   final IconData icon;
@@ -1200,18 +1087,14 @@ class _ControlButton extends StatelessWidget {
                   : Colors.white.withValues(alpha: 0.1),
               shape: BoxShape.circle,
               border: Border.all(
-                  color:
-                      isActive ? AppColors.primary : Colors.white24),
+                  color: isActive ? AppColors.primary : Colors.white24),
             ),
             child: Icon(icon,
-                color:
-                    isActive ? AppColors.primary : Colors.white,
-                size: 24),
+                color: isActive ? AppColors.primary : Colors.white, size: 24),
           ),
           const SizedBox(height: 6),
           Text(label,
-              style: AppTextStyles.caption
-                  .copyWith(color: AppColors.textSecondary)),
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -1236,8 +1119,7 @@ class _SummaryRow extends StatelessWidget {
           Text(
             value,
             style: highlight
-                ? AppTextStyles.headingSmall
-                    .copyWith(color: AppColors.primary)
+                ? AppTextStyles.headingSmall.copyWith(color: AppColors.primary)
                 : AppTextStyles.labelLarge,
           ),
         ],
