@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -150,44 +151,119 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const _ProfileTab(),
           ],
         ),
-        bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.border)),
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _navIndex,
-            onTap: _goToTab,
-            items: [
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.explore_outlined),
-                activeIcon: Icon(Icons.explore_rounded),
-                label: 'Discover',
-              ),
-              BottomNavigationBarItem(
-                icon: Badge.count(
-                  count: _unreadCount,
-                  isLabelVisible: _unreadCount > 0,
-                  child: const Icon(Icons.chat_bubble_outline_rounded),
+        bottomNavigationBar: _FloatingNavBar(
+          currentIndex: _navIndex,
+          unreadCount: _unreadCount,
+          onTap: _goToTab,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Floating glassmorphic bottom navigation ────────────────────────────────────
+
+class _FloatingNavBar extends StatelessWidget {
+  final int currentIndex;
+  final int unreadCount;
+  final ValueChanged<int> onTap;
+
+  const _FloatingNavBar({
+    required this.currentIndex,
+    required this.unreadCount,
+    required this.onTap,
+  });
+
+  static const _items = [
+    (Icons.explore_outlined, Icons.explore_rounded, 'Discover'),
+    (Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
+    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Wallet'),
+    (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.07),
                 ),
-                activeIcon: Badge.count(
-                  count: _unreadCount,
-                  isLabelVisible: _unreadCount > 0,
-                  child: const Icon(Icons.chat_bubble_rounded),
-                ),
-                label: 'Chats',
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                activeIcon: Icon(Icons.account_balance_wallet_rounded),
-                label: 'Wallet',
+              child: Row(
+                children: List.generate(_items.length, (i) {
+                  final selected = i == currentIndex;
+                  final (outlineIcon, filledIcon, label) = _items[i];
+                  final icon = Icon(
+                    selected ? filledIcon : outlineIcon,
+                    color: selected ? AppColors.primary : AppColors.textHint,
+                    size: 22,
+                  );
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => onTap(i),
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOut,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 5),
+                            decoration: selected
+                                ? BoxDecoration(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.13),
+                                    borderRadius: BorderRadius.circular(20),
+                                  )
+                                : null,
+                            child: i == 1 && unreadCount > 0
+                                ? Badge.count(
+                                    count: unreadCount,
+                                    child: icon,
+                                  )
+                                : icon,
+                          ),
+                          const SizedBox(height: 2),
+                          AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 220),
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 10,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.textHint,
+                            ),
+                            child: Text(label),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.person_outline_rounded),
-                activeIcon: Icon(Icons.person_rounded),
-                label: 'Profile',
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -46,8 +47,11 @@ class HostCard extends StatelessWidget {
       onLongPress: _isOwnCard ? null : () => _showQuickActions(context),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           color: AppColors.card,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.06),
+          ),
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
@@ -121,57 +125,92 @@ class HostCard extends StatelessWidget {
               ),
             ),
 
-            // Info at bottom
+            // Glass info panel at bottom
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      host.name,
-                      style: AppTextStyles.labelLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      border: Border(
+                        top: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 3),
-                    Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.star_rounded,
-                            color: AppColors.gold, size: 12),
-                        const SizedBox(width: 2),
-                        Text(host.rating.toStringAsFixed(1),
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.gold)),
-                        const Spacer(),
-                        Text('₹${host.audioRatePerMin.toInt()}/min',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.primaryLight)),
+                        Text(
+                          host.name,
+                          style: AppTextStyles.labelLarge,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            const Icon(Icons.star_rounded,
+                                color: AppColors.gold, size: 12),
+                            const SizedBox(width: 2),
+                            Text(host.rating.toStringAsFixed(1),
+                                style: AppTextStyles.caption
+                                    .copyWith(color: AppColors.gold)),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary
+                                    .withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.4),
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                '₹${host.audioRatePerMin.toInt()}/min',
+                                style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.primaryLight,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (host.languages.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 4,
+                            children: host.languages.take(2).map((lang) =>
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(lang,
+                                    style: AppTextStyles.caption
+                                        .copyWith(fontSize: 9)),
+                              ),
+                            ).toList(),
+                          ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    // Language chips
-                    Wrap(
-                      spacing: 4,
-                      children: host.languages.take(2).map((lang) =>
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(lang,
-                              style: AppTextStyles.caption
-                                  .copyWith(fontSize: 9)),
-                        ),
-                      ).toList(),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -180,7 +219,7 @@ class HostCard extends StatelessWidget {
             if (host.isOnline)
               Positioned(
                 right: 8,
-                bottom: 50,
+                bottom: 90,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
