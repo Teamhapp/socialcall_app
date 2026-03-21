@@ -75,4 +75,13 @@ class ApiEndpoints {
   // Subscriptions
   static String subscribeHost(String hostId) => '/api/subscriptions/$hostId';
   static String subscriptionStatus(String hostId) => '/api/subscriptions/status/$hostId';
+
+  // Reports & Moderation
+  static const String submitReport = '/api/reports';
+
+  // Host Analytics
+  static const String hostAnalytics = '/api/hosts/me/analytics';
+
+  // Chat — Voice Messages
+  static String chatVoice(String userId) => '/api/chat/$userId/voice';
 }

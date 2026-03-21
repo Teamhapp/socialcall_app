@@ -12,7 +12,8 @@ import '../../../shared/widgets/sheet_drag_handle.dart';
 
 class HostCard extends StatelessWidget {
   final HostModel host;
-  const HostCard({super.key, required this.host});
+  final String? currentUserId;
+  const HostCard({super.key, required this.host, this.currentUserId});
 
   // ── Long-press quick-action sheet ────────────────────────────────────────
 
@@ -28,11 +29,21 @@ class HostCard extends StatelessWidget {
     );
   }
 
+  bool get _isOwnCard => currentUserId != null && currentUserId == host.userId;
+
+  void _onTap(BuildContext context) {
+    if (_isOwnCard) {
+      context.push('/host-dashboard');
+    } else {
+      context.push('/host/${host.id}', extra: host);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/host/${host.id}', extra: host),
-      onLongPress: () => _showQuickActions(context),
+      onTap: () => _onTap(context),
+      onLongPress: _isOwnCard ? null : () => _showQuickActions(context),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),

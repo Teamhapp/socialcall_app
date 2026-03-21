@@ -140,6 +140,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onSearchChanged: hostsNotifier.setSearch,
               onRefresh: () => hostsNotifier.fetchHosts(),
               userName: ref.read(authProvider).user?.name,
+              currentUserId: ref.read(authProvider).user?.id,
             ),
             _ChatListTab(
             onUnreadCountChanged: (n) =>
@@ -203,6 +204,7 @@ class _DiscoveryTab extends StatelessWidget {
   final List<HostModel> filteredHosts;
   final bool isLoading;
   final String? userName;
+  final String? currentUserId;
   final ValueChanged<String> onCategoryChanged;
   final ValueChanged<String> onSearchChanged;
   final Future<void> Function() onRefresh;
@@ -217,6 +219,7 @@ class _DiscoveryTab extends StatelessWidget {
     required this.onSearchChanged,
     required this.onRefresh,
     this.userName,
+    this.currentUserId,
   });
 
   @override
@@ -373,7 +376,10 @@ class _DiscoveryTab extends StatelessWidget {
                     )
                   : SliverGrid(
                       delegate: SliverChildBuilderDelegate(
-                        (_, i) => HostCard(host: filteredHosts[i]),
+                        (_, i) => HostCard(
+                          host: filteredHosts[i],
+                          currentUserId: currentUserId,
+                        ),
                         childCount: filteredHosts.length,
                       ),
                       gridDelegate:

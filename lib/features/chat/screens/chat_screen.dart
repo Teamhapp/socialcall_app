@@ -13,6 +13,9 @@ import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../models/message_model.dart';
 import '../../../shared/widgets/online_badge.dart';
+import '../../report/widgets/report_dialog.dart';
+import '../widgets/voice_message_bubble.dart';
+import '../widgets/voice_recorder_button.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final HostModel host;
@@ -323,7 +326,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             }
                             final msg = _messages[i];
                             final isMe = msg.senderId == _myUserId;
-                            return _MessageBubble(message: msg, isMe: isMe);
+                            return _MessageBubble(
+                              message: msg,
+                              isMe: isMe,
+                              onReport: isMe
+                                  ? null
+                                  : () => ReportDialog.show(
+                                        context,
+                                        targetType: 'message',
+                                        targetId: msg.id,
+                                      ),
+                            );
                           },
                         ),
                       ),
@@ -372,6 +385,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
+                VoiceRecorderButton(
+                  receiverUserId: widget.host.userId,
+                  onMessageSent: (msg) {
+                    setState(() => _messages.add(msg));
+                    _scrollToBottom();
+                  },
+                ),
+                const SizedBox(width: 6),
                 GestureDetector(
                   onTap: _sendMessage,
                   child: Container(
@@ -415,67 +436,108 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
+  final VoidCallback? onReport;
 
-  const _MessageBubble({required this.message, required this.isMe});
+  const _MessageBubble({
+    required this.message,
+    required this.isMe,
+    this.onReport,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: 4,
-        bottom: 4,
-        left: isMe ? 60 : 0,
-        right: isMe ? 0 : 60,
-      ),
-      child: Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                gradient: isMe ? AppColors.primaryGradient : null,
-                color: isMe ? null : AppColors.card,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isMe ? 18 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 18),
-                ),
-              ),
-              child: Text(
-                message.content,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: isMe ? Colors.white : AppColors.textPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 3),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  timeago.format(message.createdAt),
-                  style: AppTextStyles.caption,
-                ),
-                if (isMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    message.isRead
-                        ? Icons.done_all_rounded
-                        : Icons.done_rounded,
-                    size: 12,
-                    color: message.isRead
-                        ? AppColors.primary
-                        : AppColors.textHint,
+    final isVoice = message.messageType == 'voice';
+
+    return GestureDetector(
+      onLongPress: onReport == null
+          ? null
+          : () => showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                builder: (_) => Container(
+                  margin: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
                   ),
+                  child: ListTile(
+                    leading: const Icon(Icons.flag_rounded,
+                        color: AppColors.callRed),
+                    title: Text('Report Message',
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.callRed)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onReport?.call();
+                    },
+                  ),
+                ),
+              ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: 4,
+          bottom: 4,
+          left: isMe ? 60 : 0,
+          right: isMe ? 0 : 60,
+        ),
+        child: Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (isVoice)
+                VoiceMessageBubble(
+                  voiceUrl: message.voiceUrl ?? '',
+                  durationSeconds: message.voiceDurationSeconds ?? 0,
+                  isMe: isMe,
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: isMe ? AppColors.primaryGradient : null,
+                    color: isMe ? null : AppColors.card,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isMe ? 18 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 18),
+                    ),
+                  ),
+                  child: Text(
+                    message.content,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: isMe ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    timeago.format(message.createdAt),
+                    style: AppTextStyles.caption,
+                  ),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      message.isRead
+                          ? Icons.done_all_rounded
+                          : Icons.done_rounded,
+                      size: 12,
+                      color: message.isRead
+                          ? AppColors.primary
+                          : AppColors.textHint,
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -46,6 +46,12 @@ dependencies:
 
   # Media
   image_picker: ^1.1.2
+  record: ^6.2.0
+  audioplayers: ^6.0.0
+  path_provider: ^2.1.4
+
+  # Charts
+  fl_chart: ^0.68.0
 
   # Permissions
   permission_handler: ^11.3.1

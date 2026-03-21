@@ -12,6 +12,7 @@ import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../shared/widgets/online_badge.dart';
 import '../../live/screens/watch_stream_screen.dart';
+import '../../report/widgets/report_dialog.dart';
 
 class HostProfileScreen extends ConsumerStatefulWidget {
   final HostModel host;
@@ -226,6 +227,47 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                                     : Colors.white,
                                 size: 20),
                         onPressed: _toggleFollow,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert_rounded,
+                            color: Colors.white, size: 20),
+                        color: AppColors.surface,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        onSelected: (val) {
+                          if (val == 'report') {
+                            ReportDialog.show(
+                              context,
+                              targetType: 'host',
+                              targetId: widget.host.userId,
+                              targetName: widget.host.name,
+                            );
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'report',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.flag_rounded,
+                                    color: AppColors.callRed, size: 18),
+                                const SizedBox(width: 10),
+                                Text('Report',
+                                    style: AppTextStyles.bodyMedium
+                                        .copyWith(color: AppColors.callRed)),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

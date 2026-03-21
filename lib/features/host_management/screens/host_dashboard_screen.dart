@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +30,11 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   bool _isLoading = true;
   bool _isTogglingStatus = false;
 
+  // Analytics
+  Map<String, dynamic>? _analytics;
+  bool _isLoadingAnalytics = false;
+  String _analyticsPeriod = '30d';
+
   // PostgreSQL DECIMAL columns come back as strings from node-postgres.
   // This helper safely parses both String and num values.
   static double _d(dynamic v, [double fallback = 0.0]) {
@@ -41,10 +47,30 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadAnalytics();
   }
 
   bool get _hasPendingPayout =>
       _payouts.any((p) => p['status'] == 'pending');
+
+  Future<void> _loadAnalytics([String? period]) async {
+    final p = period ?? _analyticsPeriod;
+    setState(() { _isLoadingAnalytics = true; _analyticsPeriod = p; });
+    try {
+      final resp = await ApiClient.dio.get(
+        ApiEndpoints.hostAnalytics,
+        queryParameters: {'period': p},
+      );
+      if (mounted) {
+        setState(() {
+          _analytics = ApiClient.parseData(resp) as Map<String, dynamic>?;
+          _isLoadingAnalytics = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingAnalytics = false);
+    }
+  }
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
@@ -494,6 +520,16 @@ class _HostDashboardScreenState extends ConsumerState<HostDashboardScreen> {
                     ..._recentCalls.take(5).map(
                           (call) => _HostCallTile(call: call),
                         ),
+
+                  const SizedBox(height: 28),
+
+                  // ── Analytics Section ────────────────────────────────
+                  _AnalyticsSection(
+                    analytics: _analytics,
+                    isLoading: _isLoadingAnalytics,
+                    period: _analyticsPeriod,
+                    onPeriodChanged: _loadAnalytics,
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -1314,6 +1350,311 @@ class _KycBanner extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Analytics Section ─────────────────────────────────────────────────────────
+
+class _AnalyticsSection extends StatelessWidget {
+  final Map<String, dynamic>? analytics;
+  final bool isLoading;
+  final String period;
+  final void Function(String) onPeriodChanged;
+
+  const _AnalyticsSection({
+    required this.analytics,
+    required this.isLoading,
+    required this.period,
+    required this.onPeriodChanged,
+  });
+
+  static double _d(dynamic v, [double fallback = 0]) {
+    if (v == null) return fallback;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fallback;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = analytics?['summary'] as Map<String, dynamic>?;
+    final peakHours = (analytics?['peakHours'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final daily = (analytics?['dailyEarnings'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final breakdown = analytics?['callTypeBreakdown'] as Map<String, dynamic>?;
+    final topCallers = (analytics?['topCallers'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Analytics', style: AppTextStyles.headingSmall),
+            const Spacer(),
+            _PeriodChip(label: '7D', value: '7d', current: period, onTap: onPeriodChanged),
+            const SizedBox(width: 6),
+            _PeriodChip(label: '30D', value: '30d', current: period, onTap: onPeriodChanged),
+            const SizedBox(width: 6),
+            _PeriodChip(label: '90D', value: '90d', current: period, onTap: onPeriodChanged),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (isLoading)
+          const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: AppColors.primary)))
+        else if (analytics == null)
+          Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('No analytics yet', style: AppTextStyles.bodyMedium)))
+        else ...[
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 2.4,
+            children: [
+              _AnalyticsStatCard(label: 'Total Calls', value: '${summary?['totalCalls'] ?? 0}', icon: Icons.call_rounded, color: AppColors.primary),
+              _AnalyticsStatCard(label: 'Earned', value: '₹${_d(summary?['totalEarnings']).toStringAsFixed(0)}', icon: Icons.currency_rupee_rounded, color: AppColors.callGreen),
+              _AnalyticsStatCard(label: 'Avg Duration', value: '${(_d(summary?['avgCallDurationSeconds']) / 60).toStringAsFixed(1)} min', icon: Icons.timer_rounded, color: AppColors.accent),
+              _AnalyticsStatCard(label: 'Repeat Rate', value: '${summary?['repeatCallerRate'] ?? 0}%', icon: Icons.repeat_rounded, color: AppColors.gold),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (breakdown != null) ...[
+            Text('Call Types', style: AppTextStyles.labelLarge),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _BreakdownCard(icon: Icons.call_rounded, label: 'Audio', count: '${breakdown['audioCalls'] ?? 0} calls', earnings: '₹${_d(breakdown['audioEarnings']).toStringAsFixed(0)}', color: AppColors.callGreen)),
+              const SizedBox(width: 10),
+              Expanded(child: _BreakdownCard(icon: Icons.videocam_rounded, label: 'Video', count: '${breakdown['videoCalls'] ?? 0} calls', earnings: '₹${_d(breakdown['videoEarnings']).toStringAsFixed(0)}', color: AppColors.primary)),
+            ]),
+            const SizedBox(height: 20),
+          ],
+          if (peakHours.isNotEmpty) ...[
+            Text('Peak Hours', style: AppTextStyles.labelLarge),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 120,
+              child: BarChart(BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: peakHours.map((h) => _d(h['callCount'])).fold(0.0, (a, b) => a > b ? a : b).ceilToDouble() + 1,
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (val, _) {
+                      final h = val.toInt();
+                      if (h % 6 != 0) return const SizedBox.shrink();
+                      return Text('${h}h', style: const TextStyle(fontSize: 9, color: AppColors.textHint));
+                    },
+                    reservedSize: 16,
+                  )),
+                ),
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                barGroups: List.generate(24, (hour) {
+                  final match = peakHours.where((h) => (h['hour'] as num).toInt() == hour).firstOrNull;
+                  final count = _d(match?['callCount']);
+                  return BarChartGroupData(x: hour, barRods: [
+                    BarChartRodData(toY: count, color: count > 0 ? AppColors.primary : AppColors.border, width: 8, borderRadius: BorderRadius.circular(4)),
+                  ]);
+                }),
+              )),
+            ),
+            const SizedBox(height: 20),
+          ],
+          if (daily.length > 1) ...[
+            Text('Daily Earnings', style: AppTextStyles.labelLarge),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 120,
+              child: LineChart(LineChartData(
+                lineTouchData: const LineTouchData(enabled: false),
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                titlesData: const FlTitlesData(
+                  leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                ),
+                lineBarsData: [LineChartBarData(
+                  spots: List.generate(daily.length, (i) => FlSpot(i.toDouble(), _d(daily[i]['earnings']))),
+                  isCurved: true,
+                  color: AppColors.callGreen,
+                  barWidth: 2.5,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(show: true, color: AppColors.callGreen.withValues(alpha: 0.1)),
+                )],
+              )),
+            ),
+            const SizedBox(height: 20),
+          ],
+          if (topCallers.isNotEmpty) ...[
+            Text('Top Callers', style: AppTextStyles.labelLarge),
+            const SizedBox(height: 10),
+            ...topCallers.map((c) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundImage: c['avatar'] != null ? NetworkImage(c['avatar'] as String) : null,
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                  child: c['avatar'] == null ? const Icon(Icons.person_rounded, size: 18, color: AppColors.primary) : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(c['name'] as String? ?? '', style: AppTextStyles.bodyLarge),
+                      Text('${c['callCount']} calls · ₹${_d(c['totalSpent']).toStringAsFixed(0)} spent',
+                          style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+                    ],
+                  ),
+                ),
+              ]),
+            )),
+          ],
+        ],
+      ],
+    );
+  }
+}
+
+// ── Period Chip ───────────────────────────────────────────────────────────────
+
+class _PeriodChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final String current;
+  final void Function(String) onTap;
+
+  const _PeriodChip({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == current;
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.caption.copyWith(
+            color: selected ? Colors.white : AppColors.textSecondary,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Analytics Stat Card ───────────────────────────────────────────────────────
+
+class _AnalyticsStatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _AnalyticsStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(value, style: AppTextStyles.labelLarge.copyWith(color: color)),
+                Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textHint)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Breakdown Card ────────────────────────────────────────────────────────────
+
+class _BreakdownCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String count;
+  final String earnings;
+  final Color color;
+
+  const _BreakdownCard({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.earnings,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Text(label, style: AppTextStyles.labelLarge),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(count, style: AppTextStyles.bodyMedium),
+          Text(earnings, style: AppTextStyles.bodySmall.copyWith(color: AppColors.textHint)),
+        ],
       ),
     );
   }
