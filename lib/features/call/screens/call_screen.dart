@@ -15,6 +15,8 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/gift_picker_sheet.dart';
 import '../../../models/host_model.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/gradient_button.dart';
 
 class CallScreen extends ConsumerStatefulWidget {
   final HostModel host;
@@ -57,6 +59,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
 
   // ── Gift overlay ─────────────────────────────────────────────────────────────
   String? _giftOverlayText;
+  bool    _giftOverlayVisible = false;
   Timer?  _giftOverlayTimer;
 
   // ── Agora & socket callbacks ──────────────────────────────────────────────────
@@ -132,9 +135,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
         } catch (e) {
           debugPrint('[CallScreen] CALLER _agora.start() failed: $e');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Could not start call: $e')),
-            );
+            AppSnackBar.error(context, 'Could not start call: $e');
             context.go('/home');
           }
           return;
@@ -230,9 +231,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       debugPrint('[CallScreen] Agora token fetch failed: $e');
       if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(null);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start call: $e')),
-        );
+        AppSnackBar.error(context, 'Could not start call: $e');
         context.go('/home');
       }
       return;
@@ -251,9 +250,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       debugPrint('[CallScreen] Agora initialize failed: $e');
       if (!_agoraCredsCompleter.isCompleted) _agoraCredsCompleter.complete(null);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start call: $e')),
-        );
+        AppSnackBar.error(context, 'Could not start call: $e');
         context.go('/home');
       }
       return;
@@ -275,9 +272,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       } catch (e) {
         debugPrint('[CallScreen] HOST _agora.start() failed: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not start call: $e')),
-          );
+          AppSnackBar.error(context, 'Could not start call: $e');
           context.go('/home');
         }
         return;
@@ -292,9 +287,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       _cleanupTimers();
       CallNotificationService.dismiss();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Call was declined.')),
-      );
+      AppSnackBar.info(context, 'Call was declined.');
       context.go('/home');
     };
     SocketService.on('call_rejected', _callRejectedCb!);
@@ -335,9 +328,15 @@ class _CallScreenState extends ConsumerState<CallScreen>
       final sender = data['senderName'] as String?    ?? 'Someone';
       if (!mounted) return;
       _giftOverlayTimer?.cancel();
-      setState(() => _giftOverlayText = '$emoji $name from $sender!');
+      setState(() {
+        _giftOverlayText    = '$emoji $name from $sender!';
+        _giftOverlayVisible = true;
+      });
       _giftOverlayTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _giftOverlayText = null);
+        if (mounted) setState(() => _giftOverlayVisible = false);
+        Future.delayed(const Duration(milliseconds: 350), () {
+          if (mounted) setState(() => _giftOverlayText = null);
+        });
       });
     };
     SocketService.on('gift_received', _giftReceivedCb!);
@@ -365,9 +364,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
     if (_status != CallStatus.connecting || !mounted) return;
     SocketService.emit('call_ended', {'callId': widget.callId});
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No answer. Call cancelled.')),
-      );
+      AppSnackBar.info(context, 'No answer. Call cancelled.');
       context.go('/home');
     }
   }
@@ -445,8 +442,12 @@ class _CallScreenState extends ConsumerState<CallScreen>
             _SummaryRow('Rate', '₹${_ratePerMin.toInt()}/min'),
             _SummaryRow('Total Charged', '₹${cost.toStringAsFixed(2)}', highlight: true),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
+            GradientButton(
+              label: widget.isCaller && _seconds > 0
+                  ? 'Rate Your Call ⭐'
+                  : 'Done',
+              height: 50,
+              onTap: () {
                 Navigator.pop(context);
                 if (widget.isCaller && _seconds > 0) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -458,7 +459,6 @@ class _CallScreenState extends ConsumerState<CallScreen>
                   });
                 }
               },
-              child: const Text('Done'),
             ),
           ],
         ),
@@ -470,82 +470,140 @@ class _CallScreenState extends ConsumerState<CallScreen>
     double rating = 0;
     final commentCtrl = TextEditingController();
 
+    // Label for each star count
+    const labels = ['', 'Terrible 😤', 'Poor 😕', 'Okay 😐', 'Good 😊', 'Excellent 🤩'];
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (_, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
-            24, 24, 24,
+            24, 0, 24,
             MediaQuery.of(sheetCtx).viewInsets.bottom + 32,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+              // Drag handle
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-              const Icon(Icons.star_rounded, color: AppColors.gold, size: 36),
-              const SizedBox(height: 12),
+
+              // Host avatar
+              CircleAvatar(
+                radius: 36,
+                backgroundImage: widget.host.avatar != null
+                    ? NetworkImage(widget.host.avatar!)
+                    : null,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                child: widget.host.avatar == null
+                    ? const Icon(Icons.person_rounded,
+                        color: AppColors.primary, size: 36)
+                    : null,
+              ),
+              const SizedBox(height: 14),
+
               Text('Rate Your Call', style: AppTextStyles.headingMedium),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
-                'How was your call with ${widget.host.name}?',
-                style: AppTextStyles.bodyMedium,
+                'How was your experience with ${widget.host.name}?',
+                style: AppTextStyles.bodySmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
+
+              // Star bar — larger, spaced
               RatingBar.builder(
                 initialRating: 0,
                 minRating: 1,
                 direction: Axis.horizontal,
                 allowHalfRating: false,
                 itemCount: 5,
-                itemPadding: const EdgeInsets.symmetric(horizontal: 6),
-                itemBuilder: (_, _) =>
-                    const Icon(Icons.star_rounded, color: AppColors.gold),
+                itemSize: 48,
+                itemPadding: const EdgeInsets.symmetric(horizontal: 4),
+                itemBuilder: (_, i) => Icon(
+                  rating > i ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: AppColors.gold,
+                ),
                 onRatingUpdate: (r) => setSheetState(() => rating = r),
               ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: commentCtrl,
-                maxLines: 3,
-                style: AppTextStyles.bodyLarge,
-                decoration: const InputDecoration(
-                  hintText: 'Leave a comment (optional)...',
+
+              // Dynamic label
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: Text(
+                  rating > 0 ? labels[rating.toInt()] : 'Tap to rate',
+                  key: ValueKey(rating.toInt()),
+                  style: AppTextStyles.labelLarge.copyWith(
+                    color: rating > 0
+                        ? AppColors.gold
+                        : AppColors.textHint,
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
+              // Comment field
+              TextField(
+                controller: commentCtrl,
+                maxLines: 2,
+                style: AppTextStyles.bodyLarge,
+                decoration: InputDecoration(
+                  hintText: 'Add a comment (optional)…',
+                  prefixIcon: const Icon(Icons.edit_note_rounded,
+                      color: AppColors.textHint),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Buttons row
               Row(
                 children: [
+                  // Skip
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
+                    child: GestureDetector(
+                      onTap: () {
                         Navigator.pop(sheetCtx);
                         if (mounted) context.go('/home');
                       },
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.border),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Skip',
+                            style: AppTextStyles.labelLarge.copyWith(
+                                color: AppColors.textHint),
+                          ),
+                        ),
                       ),
-                      child: const Text('Skip'),
                     ),
                   ),
                   const SizedBox(width: 12),
+                  // Submit — gradient
                   Expanded(
-                    child: ElevatedButton(
-                      onPressed: rating == 0
+                    flex: 2,
+                    child: GradientButton(
+                      label: 'Submit ⭐',
+                      height: 50,
+                      onTap: rating == 0
                           ? null
                           : () async {
                               Navigator.pop(sheetCtx);
@@ -558,20 +616,17 @@ class _CallScreenState extends ConsumerState<CallScreen>
                                       'comment': commentCtrl.text.trim(),
                                   },
                                 );
+                                if (mounted) {
+                                  AppSnackBar.success(
+                                      context, 'Thanks for your feedback!');
+                                }
                               } catch (_) {}
                               if (mounted) context.go('/home');
                             },
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text('Submit'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -600,7 +655,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
           children: [
             widget.isVideo ? _buildVideoUI() : _buildAudioUI(),
             if (_lowBalance) _buildLowBalanceBanner(),
-            if (_giftOverlayText != null) _buildGiftToast(),
+            _buildGiftToast(),
           ],
         ),
       ),
@@ -643,7 +698,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
       bottom: 120, left: 0, right: 0,
       child: Center(
         child: AnimatedOpacity(
-          opacity: _giftOverlayText != null ? 1.0 : 0.0,
+          opacity: _giftOverlayVisible ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

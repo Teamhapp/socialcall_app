@@ -7,6 +7,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/api/api_client.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 
 enum _LoginMode { otp, password }
 
@@ -27,10 +28,12 @@ const _countryData = [
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneController    = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading   = false;
-  bool _obscurePass = true;
-  String _countryCode = '+91';
-  _LoginMode _mode  = _LoginMode.otp;
+  bool _isLoading      = false;
+  bool _obscurePass    = true;
+  bool _phoneFocused   = false;
+  bool _passwordFocused = false;
+  String _countryCode  = '+91';
+  _LoginMode _mode     = _LoginMode.otp;
 
   String get _countryFlag =>
       _countryData.firstWhere((c) => c.$3 == _countryCode,
@@ -47,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // ─── OTP flow ──────────────────────────────────────────────────────────────
   void _sendOtp() async {
+    FocusScope.of(context).unfocus();
     if (_phoneController.text.trim().length != 10) {
       _showSnack('Enter a valid 10-digit phone number');
       return;
@@ -69,6 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // ─── Password flow ─────────────────────────────────────────────────────────
   void _loginWithPassword() async {
+    FocusScope.of(context).unfocus();
     if (_phoneController.text.trim().length != 10) {
       _showSnack('Enter a valid 10-digit phone number');
       return;
@@ -98,10 +103,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : null,
-    ));
+    if (isError) {
+      AppSnackBar.error(context, msg);
+    } else {
+      AppSnackBar.info(context, msg);
+    }
   }
 
   @override
@@ -173,11 +179,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // ── Phone field ───────────────────────────────────────────────
                 Text('Phone Number', style: AppTextStyles.labelLarge),
                 const SizedBox(height: 12),
-                Container(
+                Focus(
+                  onFocusChange: (v) => setState(() => _phoneFocused = v),
+                  child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(
+                      color: _phoneFocused ? AppColors.primary : AppColors.border,
+                      width: _phoneFocused ? 1.5 : 1,
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -227,6 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
 
                 // ── Password field (password mode only) ───────────────────────
@@ -234,11 +247,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 20),
                   Text('Password', style: AppTextStyles.labelLarge),
                   const SizedBox(height: 12),
-                  Container(
+                  Focus(
+                    onFocusChange: (v) =>
+                        setState(() => _passwordFocused = v),
+                    child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
                     decoration: BoxDecoration(
                       color: AppColors.card,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(
+                        color: _passwordFocused
+                            ? AppColors.primary
+                            : AppColors.border,
+                        width: _passwordFocused ? 1.5 : 1,
+                      ),
                     ),
                     child: TextField(
                       controller: _passwordController,
@@ -263,6 +285,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                       ),
+                    ),
                     ),
                   ),
                 ],
@@ -393,15 +416,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: 16),
           Text('Select Country', style: AppTextStyles.headingMedium),
           const SizedBox(height: 8),
-          ..._countryData.map((c) => ListTile(
-                leading: Text(c.$1, style: const TextStyle(fontSize: 24)),
-                title: Text(c.$2, style: AppTextStyles.bodyLarge),
-                trailing: Text(c.$3, style: AppTextStyles.bodyMedium),
-                onTap: () {
-                  setState(() => _countryCode = c.$3);
-                  Navigator.pop(context);
-                },
-              )),
+          ..._countryData.map((c) {
+                final isSelected = _countryCode == c.$3;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _countryCode = c.$3);
+                    Navigator.pop(context);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? AppColors.primaryGradient
+                          : null,
+                      color: isSelected
+                          ? null
+                          : AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.transparent
+                            : AppColors.border,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(c.$1,
+                            style: const TextStyle(fontSize: 24)),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            c.$2,
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              color: isSelected
+                                  ? Colors.white
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          c.$3,
+                          style: AppTextStyles.labelLarge.copyWith(
+                            color: isSelected
+                                ? Colors.white70
+                                : AppColors.textHint,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.check_circle_rounded,
+                              color: Colors.white, size: 18),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
           const SizedBox(height: 12),
         ],
       ),

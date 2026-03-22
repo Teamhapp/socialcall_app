@@ -4,12 +4,15 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/host_model.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/gradient_button.dart';
 
 class CallHistoryScreen extends ConsumerStatefulWidget {
   const CallHistoryScreen({super.key});
@@ -103,12 +106,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
       }
     } on DioException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ApiClient.errorMessage(e)),
-            backgroundColor: AppColors.callRed,
-          ),
-        );
+        AppSnackBar.error(context, ApiClient.errorMessage(e));
       }
     } finally {
       if (mounted) setState(() => _callingId = null);
@@ -131,15 +129,43 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
         ),
         title: Text('Call History', style: AppTextStyles.headingMedium),
         bottom: isHost
-            ? TabBar(
-                controller: _tabController,
-                labelColor: AppColors.primary,
-                unselectedLabelColor: AppColors.textHint,
-                indicatorColor: AppColors.primary,
-                tabs: const [
-                  Tab(text: 'My Calls'),
-                  Tab(text: 'Received'),
-                ],
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(52),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: AppColors.textHint,
+                      labelStyle: AppTextStyles.labelLarge,
+                      unselectedLabelStyle: AppTextStyles.labelLarge,
+                      dividerColor: Colors.transparent,
+                      indicator: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.40),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicatorPadding: const EdgeInsets.all(3),
+                      tabs: const [
+                        Tab(text: 'My Calls'),
+                        Tab(text: 'Received'),
+                      ],
+                    ),
+                  ),
+                ),
               )
             : PreferredSize(
                 preferredSize: const Size.fromHeight(1),
@@ -147,8 +173,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
               ),
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
+          ? _buildSkeleton()
           : RefreshIndicator(
               onRefresh: _load,
               color: AppColors.primary,
@@ -185,6 +210,72 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen>
             ),
     );
   }
+
+  // ── Shimmer skeleton ─────────────────────────────────────────────────────────
+
+  Widget _buildSkeleton() => ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 7,
+        itemBuilder: (_, _) => Shimmer.fromColors(
+          baseColor: AppColors.card,
+          highlightColor: AppColors.cardLight,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                    radius: 24, backgroundColor: AppColors.cardLight),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                          height: 13, width: 110, color: AppColors.cardLight),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                              height: 20,
+                              width: 52,
+                              decoration: BoxDecoration(
+                                  color: AppColors.cardLight,
+                                  borderRadius: BorderRadius.circular(6))),
+                          const SizedBox(width: 8),
+                          Container(
+                              height: 10,
+                              width: 40,
+                              color: AppColors.cardLight),
+                          const SizedBox(width: 8),
+                          Container(
+                              height: 10,
+                              width: 60,
+                              color: AppColors.cardLight),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                        height: 14, width: 50, color: AppColors.cardLight),
+                    const SizedBox(height: 4),
+                    Container(
+                        height: 10, width: 36, color: AppColors.cardLight),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 // ── Call list ─────────────────────────────────────────────────────────────────
@@ -313,12 +404,7 @@ class _CallTileState extends State<_CallTile> {
       );
       setState(() => _rated = true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Thanks for your feedback! ⭐'),
-            backgroundColor: AppColors.callGreen,
-          ),
-        );
+        AppSnackBar.success(context, 'Thanks for your feedback! ⭐');
       }
     } catch (_) {}
   }
@@ -356,13 +442,16 @@ class _CallTileState extends State<_CallTile> {
                     const Icon(Icons.star_rounded, color: AppColors.gold),
                 onRatingUpdate: (r) => setS(() => tempRating = r),
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
+              const SizedBox(height: 28),
+              GradientButton(
+                label: 'Submit Rating',
+                icon: const Icon(Icons.star_rounded,
+                    color: Colors.white, size: 18),
+                height: 50,
+                onTap: () {
                   Navigator.pop(ctx);
                   _submitRating(tempRating);
                 },
-                child: const Text('Submit Rating'),
               ),
             ],
           ),

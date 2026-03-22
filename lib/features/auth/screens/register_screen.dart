@@ -23,10 +23,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _confirmController  = TextEditingController();
 
-  bool _isLoading   = false;
-  bool _obscurePass = true;
-  bool _obscureConf = true;
-  String _countryCode = '+91';
+  bool _isLoading        = false;
+  bool _obscurePass      = true;
+  bool _obscureConf      = true;
+  bool _nameFocused      = false;
+  bool _phoneFocused     = false;
+  bool _passwordFocused  = false;
+  bool _confirmFocused   = false;
+  String _countryCode    = '+91';
   String? _selectedGender;
 
   // (flag, name, dialCode)
@@ -59,6 +63,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String get _fullPhone => '$_countryCode${_phoneController.text.trim()}';
 
   void _register() async {
+    FocusScope.of(context).unfocus();
     final phone    = _phoneController.text.trim();
     final name     = _nameController.text.trim();
     final password = _passwordController.text;
@@ -183,27 +188,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Text('Full Name (optional)',
                           style: AppTextStyles.labelLarge),
                       const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: TextField(
-                          controller: _nameController,
-                          textCapitalization: TextCapitalization.words,
-                          style: AppTextStyles.bodyLarge,
-                          decoration: const InputDecoration(
-                            hintText: 'Your name',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 18),
-                            prefixIcon: Icon(
-                              Icons.person_outline,
-                              color: AppColors.textHint,
-                              size: 20,
+                      Focus(
+                        onFocusChange: (v) =>
+                            setState(() => _nameFocused = v),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _nameFocused
+                                  ? AppColors.primary
+                                  : AppColors.border,
+                              width: _nameFocused ? 1.5 : 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _nameController,
+                            textCapitalization: TextCapitalization.words,
+                            style: AppTextStyles.bodyLarge,
+                            decoration: const InputDecoration(
+                              hintText: 'Your name',
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 18),
+                              prefixIcon: Icon(
+                                Icons.person_outline,
+                                color: AppColors.textHint,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
@@ -214,13 +229,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       // ── Phone field ───────────────────────────────────────
                       Text('Phone Number', style: AppTextStyles.labelLarge),
                       const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
+                      Focus(
+                        onFocusChange: (v) =>
+                            setState(() => _phoneFocused = v),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _phoneFocused
+                                  ? AppColors.primary
+                                  : AppColors.border,
+                              width: _phoneFocused ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
                           children: [
                             GestureDetector(
                               onTap: _showCountryPicker,
@@ -267,6 +291,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                           ],
                         ),
+                        ),
                       ),
 
                       const SizedBox(height: 20),
@@ -278,6 +303,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         controller: _passwordController,
                         hintText: 'Min. 6 characters',
                         obscure: _obscurePass,
+                        focused: _passwordFocused,
+                        onFocusChange: (v) =>
+                            setState(() => _passwordFocused = v),
                         onToggle: () =>
                             setState(() => _obscurePass = !_obscurePass),
                       ),
@@ -291,6 +319,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         controller: _confirmController,
                         hintText: 'Re-enter password',
                         obscure: _obscureConf,
+                        focused: _confirmFocused,
+                        onFocusChange: (v) =>
+                            setState(() => _confirmFocused = v),
                         onToggle: () =>
                             setState(() => _obscureConf = !_obscureConf),
                       ),
@@ -355,13 +386,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     required TextEditingController controller,
     required String hintText,
     required bool obscure,
+    required bool focused,
+    required ValueChanged<bool> onFocusChange,
     required VoidCallback onToggle,
   }) {
-    return Container(
+    return Focus(
+      onFocusChange: onFocusChange,
+      child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: focused ? AppColors.primary : AppColors.border,
+          width: focused ? 1.5 : 1,
+        ),
       ),
       child: TextField(
         controller: controller,
@@ -385,6 +424,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

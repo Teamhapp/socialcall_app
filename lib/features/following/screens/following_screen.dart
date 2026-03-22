@@ -2,11 +2,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/host_model.dart';
+import '../../../shared/widgets/gradient_button.dart';
 import '../../../shared/widgets/online_badge.dart';
 
 class FollowingScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class FollowingScreen extends StatefulWidget {
 class _FollowingScreenState extends State<FollowingScreen> {
   List<HostModel> _hosts = [];
   bool _isLoading = true;
+  bool _hasError = false;
   String? _callingHostId;  // tracks which host is being called
   String? _unfollowingId;  // tracks which host is being unfollowed
 
@@ -98,7 +101,7 @@ class _FollowingScreenState extends State<FollowingScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _hasError = false; });
     try {
       final resp = await ApiClient.dio.get(ApiEndpoints.hostFollowing);
       final raw = ApiClient.parseData(resp) as List? ?? [];
@@ -112,7 +115,7 @@ class _FollowingScreenState extends State<FollowingScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() { _hasError = true; _isLoading = false; });
     }
   }
 
@@ -135,9 +138,31 @@ class _FollowingScreenState extends State<FollowingScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : RefreshIndicator(
+          ? _buildSkeleton()
+          : _hasError
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off_rounded,
+                            size: 48, color: AppColors.textHint),
+                        const SizedBox(height: 12),
+                        Text('Could not load',
+                            style: AppTextStyles.bodyMedium),
+                        const SizedBox(height: 8),
+                        Text('Check your connection and try again.',
+                            style: AppTextStyles.bodySmall,
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 20),
+                        GradientButton(
+                            label: 'Retry', onTap: _load, height: 44),
+                      ],
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
               onRefresh: _load,
               color: AppColors.primary,
               child: _hosts.isEmpty
@@ -264,6 +289,72 @@ class _FollowingScreenState extends State<FollowingScreen> {
             ),
     );
   }
+
+  // ── Shimmer skeleton ─────────────────────────────────────────────────────────
+
+  Widget _buildSkeleton() => ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 6,
+        itemBuilder: (_, _) => Shimmer.fromColors(
+          baseColor: AppColors.card,
+          highlightColor: AppColors.cardLight,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                    radius: 28, backgroundColor: AppColors.cardLight),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                          height: 13,
+                          width: 120,
+                          color: AppColors.cardLight),
+                      const SizedBox(height: 6),
+                      Container(
+                          height: 10,
+                          width: 80,
+                          color: AppColors.cardLight),
+                      const SizedBox(height: 6),
+                      Container(
+                          height: 10,
+                          width: 60,
+                          color: AppColors.cardLight),
+                    ],
+                  ),
+                ),
+                Column(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                          color: AppColors.cardLight,
+                          shape: BoxShape.circle),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                          color: AppColors.cardLight,
+                          shape: BoxShape.circle),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 // ── Following tile ────────────────────────────────────────────────────────────
