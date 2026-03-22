@@ -10,6 +10,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../models/host_model.dart';
 import '../../../shared/widgets/online_badge.dart';
 import '../../../shared/widgets/sheet_drag_handle.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 
 class HostCard extends StatelessWidget {
   final HostModel host;
@@ -110,6 +111,29 @@ class HostCard extends StatelessWidget {
               child: OnlineBadge(isOnline: host.isOnline),
             ),
 
+            // Gender badge
+            if (host.gender != null)
+              Positioned(
+                top: 32,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.50),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    host.gender == 'male'
+                        ? '👨'
+                        : host.gender == 'female'
+                            ? '👩'
+                            : '⚧',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ),
+
             // Long-press hint (subtle)
             Positioned(
               top: 10,
@@ -148,7 +172,9 @@ class HostCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          host.name,
+                          host.age != null
+                              ? '${host.name}, ${host.age}'
+                              : host.name,
                           style: AppTextStyles.labelLarge,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -156,12 +182,34 @@ class HostCard extends StatelessWidget {
                         const SizedBox(height: 3),
                         Row(
                           children: [
-                            const Icon(Icons.star_rounded,
-                                color: AppColors.gold, size: 12),
-                            const SizedBox(width: 2),
-                            Text(host.rating.toStringAsFixed(1),
-                                style: AppTextStyles.caption
-                                    .copyWith(color: AppColors.gold)),
+                            // Mini filled star row
+                            ...List.generate(5, (i) {
+                              final fill =
+                                  (host.rating - i).clamp(0.0, 1.0);
+                              return Icon(
+                                fill >= 0.75
+                                    ? Icons.star_rounded
+                                    : fill >= 0.25
+                                        ? Icons.star_half_rounded
+                                        : Icons.star_outline_rounded,
+                                color: AppColors.gold,
+                                size: 11,
+                              );
+                            }),
+                            const SizedBox(width: 4),
+                            Text(
+                              host.rating.toStringAsFixed(1),
+                              style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.gold, fontSize: 10),
+                            ),
+                            if (host.totalReviews > 0) ...[
+                              Text(
+                                ' (${host.totalReviews})',
+                                style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.textHint,
+                                    fontSize: 9),
+                              ),
+                            ],
                             const Spacer(),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -204,6 +252,30 @@ class HostCard extends StatelessWidget {
                                 child: Text(lang,
                                     style: AppTextStyles.caption
                                         .copyWith(fontSize: 9)),
+                              ),
+                            ).toList(),
+                          ),
+                        ],
+                        if (host.tags.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 4,
+                            children: host.tags.take(2).map((tag) =>
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary
+                                      .withValues(alpha: 0.20),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  '#$tag',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.primaryLight,
+                                    fontSize: 9,
+                                  ),
+                                ),
                               ),
                             ).toList(),
                           ),
@@ -343,13 +415,12 @@ class _QuickActionSheetState extends State<_QuickActionSheet> {
           _isFollowed = !_isFollowed;
           _following = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                _isFollowed ? 'Following ${widget.host.name}' : 'Unfollowed'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (_isFollowed) {
+          AppSnackBar.success(
+              context, 'Following ${widget.host.name}');
+        } else {
+          AppSnackBar.info(context, 'Unfollowed ${widget.host.name}');
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _following = false);

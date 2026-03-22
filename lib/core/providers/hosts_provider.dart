@@ -4,6 +4,9 @@ import '../api/api_endpoints.dart';
 import '../socket/socket_service.dart';
 import '../../models/host_model.dart';
 
+// Sentinel for nullable copyWith fields
+const _nil = Object();
+
 // ── State ──────────────────────────────────────────────────────────────────────
 class HostsState {
   final List<HostModel> hosts;
@@ -13,6 +16,9 @@ class HostsState {
   final bool hasMore;
   final String search;
   final String filter; // All / Online / language
+  final String? genderFilter;    // null | 'male' | 'female'
+  final String? ageGroupFilter;  // null | '18-25' | '25-35' | '35+'
+  final String? tagFilter;       // null | any tag string
   // Non-null when a followed host just came online — UI shows a snackbar then clears it.
   final String? followedHostOnlineMessage;
 
@@ -24,6 +30,9 @@ class HostsState {
     this.hasMore = true,
     this.search = '',
     this.filter = 'All',
+    this.genderFilter,
+    this.ageGroupFilter,
+    this.tagFilter,
     this.followedHostOnlineMessage,
   });
 
@@ -35,6 +44,9 @@ class HostsState {
     bool? hasMore,
     String? search,
     String? filter,
+    Object? genderFilter = _nil,
+    Object? ageGroupFilter = _nil,
+    Object? tagFilter = _nil,
     String? followedHostOnlineMessage,
     bool clearHostOnlineMessage = false,
   }) =>
@@ -46,6 +58,9 @@ class HostsState {
         hasMore: hasMore ?? this.hasMore,
         search: search ?? this.search,
         filter: filter ?? this.filter,
+        genderFilter:   genderFilter   == _nil ? this.genderFilter   : genderFilter   as String?,
+        ageGroupFilter: ageGroupFilter == _nil ? this.ageGroupFilter : ageGroupFilter as String?,
+        tagFilter:      tagFilter      == _nil ? this.tagFilter      : tagFilter      as String?,
         followedHostOnlineMessage: clearHostOnlineMessage
             ? null
             : followedHostOnlineMessage ?? this.followedHostOnlineMessage,
@@ -97,18 +112,9 @@ class HostsNotifier extends StateNotifier<HostsState> {
   }
 
   void _updateHostOnlineStatus(String userId, bool isOnline) {
-    final updated = state.hosts.map((h) {
-      if (h.userId == userId) {
-        return HostModel(
-          id: h.id, userId: h.userId, name: h.name, avatar: h.avatar,
-          bio: h.bio, languages: h.languages, audioRatePerMin: h.audioRatePerMin,
-          videoRatePerMin: h.videoRatePerMin, rating: h.rating,
-          totalCalls: h.totalCalls, isOnline: isOnline,
-          isVerified: h.isVerified, followersCount: h.followersCount,
-        );
-      }
-      return h;
-    }).toList();
+    final updated = state.hosts
+        .map((h) => h.userId == userId ? h.copyWith(isOnline: isOnline) : h)
+        .toList();
     state = state.copyWith(hosts: updated);
   }
 
@@ -132,7 +138,10 @@ class HostsNotifier extends StateNotifier<HostsState> {
       if (state.filter != 'All' && state.filter != 'Online') {
         params['language'] = state.filter;
       }
-      if (state.search.isNotEmpty) params['search'] = state.search;
+      if (state.search.isNotEmpty)       params['search']    = state.search;
+      if (state.genderFilter != null)    params['gender']    = state.genderFilter!;
+      if (state.ageGroupFilter != null)  params['age_group'] = state.ageGroupFilter!;
+      if (state.tagFilter != null)       params['tag']       = state.tagFilter!;
 
       final resp = await ApiClient.dio.get(
         ApiEndpoints.hosts,
@@ -176,13 +185,30 @@ class HostsNotifier extends StateNotifier<HostsState> {
     fetchHosts();
   }
 
+  void setGenderFilter(String? gender) {
+    if (gender == state.genderFilter) return;
+    state = state.copyWith(genderFilter: gender, hosts: [], page: 1, hasMore: true);
+    fetchHosts();
+  }
+
+  void setAgeGroupFilter(String? ageGroup) {
+    if (ageGroup == state.ageGroupFilter) return;
+    state = state.copyWith(ageGroupFilter: ageGroup, hosts: [], page: 1, hasMore: true);
+    fetchHosts();
+  }
+
+  void setTagFilter(String? tag) {
+    if (tag == state.tagFilter) return;
+    state = state.copyWith(tagFilter: tag, hosts: [], page: 1, hasMore: true);
+    fetchHosts();
+  }
+
   Future<void> loadMore() async {
     if (!state.hasMore || state.isLoading) return;
     await fetchHosts(refresh: false);
   }
 
   List<HostModel> get filteredHosts {
-    // Client-side filter for categories not yet applied server-side
     return state.hosts;
   }
 }
@@ -191,3 +217,18 @@ class HostsNotifier extends StateNotifier<HostsState> {
 final hostsProvider = StateNotifierProvider<HostsNotifier, HostsState>(
   (ref) => HostsNotifier(),
 );
+
+// ── Tags provider — fetches distinct host tags from backend ───────────────────
+final tagsProvider = FutureProvider<List<String>>((ref) async {
+  try {
+    final resp = await ApiClient.dio.get(ApiEndpoints.hostTags);
+    final data = ApiClient.parseData(resp);
+    if (data is List) return List<String>.from(data);
+    if (data is Map && data['tags'] is List) {
+      return List<String>.from(data['tags'] as List);
+    }
+    return const [];
+  } catch (_) {
+    return const [];
+  }
+});

@@ -110,7 +110,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ── Register with phone + password ──────────────────────────────────────────
   Future<UserModel> register(String phone, String password,
-      {String? name}) async {
+      {String? name, String? gender}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final resp = await ApiClient.dio.post(
@@ -119,6 +119,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'phone': phone,
           'password': password,
           if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+          'gender': ?gender,
         },
       );
       return await _handleAuthResponse(

@@ -30,6 +30,7 @@ class ApiEndpoints {
 
   // Hosts
   static const String hosts = '/api/hosts';
+  static const String randomHost = '/api/hosts/random';
   static String hostById(String id) => '/api/hosts/$id';
   static String hostFollow(String id) => '/api/hosts/$id/follow';
   static const String hostProfile = '/api/hosts/profile';
@@ -84,4 +85,35 @@ class ApiEndpoints {
 
   // Chat — Voice Messages
   static String chatVoice(String userId) => '/api/chat/$userId/voice';
+
+  // Admin
+  static const String adminLogin   = '/admin/api/login';
+  static const String adminStats   = '/admin/api/stats';
+  static const String adminUsers   = '/admin/api/users';
+  static String adminUserWallet(String id)      => '/admin/api/users/$id/wallet';
+  static String adminUserStatus(String id)      => '/admin/api/users/$id/status';
+  static const String adminHosts   = '/admin/api/hosts';
+  static String adminHostVerify(String id)      => '/admin/api/hosts/$id/verify';
+  static String adminHostPromote(String id)     => '/admin/api/hosts/$id/promote';
+  static String adminHostDemote(String id)      => '/admin/api/hosts/$id/demote';
+  static const String adminPayouts = '/admin/api/payouts';
+  static String adminPayout(String id)          => '/admin/api/payouts/$id';
+  static const String adminKyc     = '/admin/api/kyc';
+  static String adminKycApprove(String id)      => '/admin/api/kyc/$id/approve';
+  static String adminKycReject(String id)       => '/admin/api/kyc/$id/reject';
+  static const String adminPromos  = '/admin/api/promo-codes';
+  static String adminPromoDeactivate(String id) => '/admin/api/promo-codes/$id/deactivate';
+  static const String adminReviews = '/admin/api/reviews';
+  static String adminReview(String id)          => '/admin/api/reviews/$id';
+  static const String adminPush    = '/admin/api/push/broadcast';
+  static const String adminHealth  = '/admin/api/health';
+  static const String adminOffers  = '/admin/api/offers';
+  static String adminOffer(String id) => '/admin/api/offers/$id';
+  static const String adminWalletBonus = '/admin/api/offers/wallet-bonus';
+
+  // Offers (public)
+  static const String offers = '/api/offers';
+
+  // Host tags
+  static const String hostTags = '/api/hosts/tags';
 }

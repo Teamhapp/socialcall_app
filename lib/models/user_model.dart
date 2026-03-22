@@ -7,6 +7,8 @@ class UserModel {
   final bool isHost;
   final bool hasPassword; // true = user can also login with password
   final DateTime createdAt;
+  final String? gender; // 'male' | 'female' | 'other'
+  final int? age;
 
   const UserModel({
     required this.id,
@@ -17,6 +19,8 @@ class UserModel {
     required this.isHost,
     this.hasPassword = false,
     required this.createdAt,
+    this.gender,
+    this.age,
   });
 
   // Safely parses PostgreSQL DECIMAL/NUMERIC which arrives as String from node-postgres
@@ -38,6 +42,8 @@ class UserModel {
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : DateTime.now(),
+        gender: json['gender'] as String?,
+        age: json['age'] as int?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -49,6 +55,8 @@ class UserModel {
         'is_host': isHost,
         'hasPassword': hasPassword,
         'created_at': createdAt.toIso8601String(),
+        'gender': gender,
+        'age': age,
       };
 
   UserModel copyWith({
@@ -60,6 +68,8 @@ class UserModel {
     bool? isHost,
     bool? hasPassword,
     DateTime? createdAt,
+    Object? gender = _sentinel,
+    Object? age = _sentinel,
   }) =>
       UserModel(
         id: id ?? this.id,
@@ -70,5 +80,10 @@ class UserModel {
         isHost: isHost ?? this.isHost,
         hasPassword: hasPassword ?? this.hasPassword,
         createdAt: createdAt ?? this.createdAt,
+        gender: gender == _sentinel ? this.gender : gender as String?,
+        age: age == _sentinel ? this.age : age as int?,
       );
 }
+
+// Sentinel object for nullable copyWith fields
+const _sentinel = Object();

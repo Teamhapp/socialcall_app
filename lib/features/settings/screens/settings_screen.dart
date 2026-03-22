@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/gender_picker.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -36,6 +40,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   // Language
   String _language = 'English';
+
+  // Hidden admin entry — tap version 5 times
+  int _versionTaps = 0;
 
   static const _langs = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Bengali'];
   static const _qualities = [
@@ -97,13 +104,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       body: ListView(
         children: [
+          // ── Profile Hero Card ──────────────────────────────────────────
+          _ProfileHeader(
+            user: user,
+            onEditTap: () => _showEditProfileSheet(context),
+          ),
+
           // ── Account ───────────────────────────────────────────────────
           _SectionHeader(title: 'Account'),
           _SettingsTile(
             icon: Icons.person_rounded,
             label: 'Edit Profile',
             subtitle: user?.name ?? 'Update your name & photo',
-            onTap: () => _showEditNameDialog(context),
+            onTap: () => _showEditProfileSheet(context),
           ),
           _SettingsTile(
             icon: Icons.phone_rounded,
@@ -227,7 +240,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: Icons.info_outline_rounded,
             label: 'App Version',
             subtitle: 'v1.0.0 (Build 1)',
-            onTap: null,
+            onTap: () {
+              _versionTaps++;
+              if (_versionTaps >= 5) {
+                _versionTaps = 0;
+                context.go('/admin-login');
+              }
+            },
           ),
           _SettingsTile(
             icon: Icons.description_rounded,
@@ -254,77 +273,83 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   // ── Dialogs ──────────────────────────────────────────────────────────────
 
-  void _showEditNameDialog(BuildContext context) {
+  void _showEditProfileSheet(BuildContext context) {
     final ctrl = TextEditingController(
         text: ref.read(authProvider).user?.name ?? '');
-    showDialog(
+    String? selectedGender = ref.read(authProvider).user?.gender;
+
+    showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Edit Name', style: AppTextStyles.headingMedium),
-        content: TextField(
-          controller: ctrl,
-          style: AppTextStyles.bodyLarge,
-          decoration: InputDecoration(
-            hintText: 'Your name',
-            hintStyle: AppTextStyles.bodyMedium,
-            filled: true,
-            fillColor: AppColors.card,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primary),
-            ),
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 28),
+        child: StatefulBuilder(
+          builder: (ctx, setSt) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Edit Profile', style: AppTextStyles.headingSmall),
+              const SizedBox(height: 20),
+              Text('Name', style: AppTextStyles.labelLarge),
+              const SizedBox(height: 8),
+              TextField(
+                controller: ctrl,
+                style: AppTextStyles.bodyLarge,
+                decoration: InputDecoration(
+                  hintText: 'Your name',
+                  hintStyle: AppTextStyles.bodyMedium,
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 20),
+              Text('Gender', style: AppTextStyles.labelLarge),
+              const SizedBox(height: 10),
+              GenderPicker(
+                selected: selectedGender,
+                onChanged: (v) => setSt(() => selectedGender = v),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () async {
+                    final name = ctrl.text.trim();
+                    if (name.isEmpty) return;
+                    Navigator.pop(context);
+                    try {
+                      await ApiClient.dio.patch(
+                        ApiEndpoints.profileUpdate,
+                        data: {
+                          'name': name,
+                          'gender': selectedGender,
+                        },
+                      );
+                      await ref.read(authProvider.notifier).refreshBalance();
+                      if (!context.mounted) return;
+                      AppSnackBar.success(context, 'Profile updated!');
+                    } on DioException catch (e) {
+                      if (!context.mounted) return;
+                      AppSnackBar.error(context, ApiClient.errorMessage(e));
+                    }
+                  },
+                  child: const Text('Save Changes'),
+                ),
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel',
-                style: AppTextStyles.labelLarge
-                    .copyWith(color: AppColors.textHint)),
-          ),
-          TextButton(
-            onPressed: () async {
-              final name = ctrl.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(context);
-              // Capture messenger before async gap to avoid
-              // use_build_context_synchronously lint.
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                await ApiClient.dio.patch(
-                  ApiEndpoints.profileUpdate,
-                  data: {'name': name},
-                );
-                // Refresh in-memory user state
-                await ref.read(authProvider.notifier).refreshBalance();
-                if (mounted) {
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('Name updated!')),
-                  );
-                }
-              } on DioException catch (e) {
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(ApiClient.errorMessage(e))),
-                  );
-                }
-              }
-            },
-            child: Text('Save',
-                style:
-                    AppTextStyles.labelLarge.copyWith(color: AppColors.primary)),
-          ),
-        ],
       ),
     );
   }
@@ -334,34 +359,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setLocal) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-            ),
-            const SizedBox(height: 16),
-            Text('Select Language', style: AppTextStyles.headingMedium),
-            const SizedBox(height: 8),
-            ..._langs.map((l) => ListTile(
-              title: Text(l, style: AppTextStyles.bodyLarge),
-              trailing: l == _language
-                  ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                  : null,
-              onTap: () {
-                setState(() => _language = l);
-                _savePref('pref_language', l);
-                Navigator.pop(context);
-              },
-            )),
-            const SizedBox(height: 16),
-          ],
+        builder: (ctx, setLocal) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('Select Language', style: AppTextStyles.headingMedium),
+              const SizedBox(height: 16),
+              ..._langs.map((l) {
+                final selected = l == _language;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _PickerTile(
+                    label: l,
+                    selected: selected,
+                    onTap: () {
+                      setState(() => _language = l);
+                      _savePref('pref_language', l);
+                      Navigator.pop(context);
+                    },
+                  ),
+                );
+              }),
+            ],
+          ),
         ),
       ),
     );
@@ -372,34 +405,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40, height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 16),
-          Text('Call Quality', style: AppTextStyles.headingMedium),
-          const SizedBox(height: 8),
-          ..._qualities.map((o) => ListTile(
-            title: Text(o.$1, style: AppTextStyles.bodyLarge),
-            subtitle: Text(o.$2, style: AppTextStyles.bodySmall),
-            trailing: o.$1 == _callQuality
-                ? const Icon(Icons.check_rounded, color: AppColors.primary)
-                : null,
-            onTap: () {
-              setState(() => _callQuality = o.$1);
-              _savePref('pref_quality', o.$1);
-              Navigator.pop(context);
-            },
-          )),
-          const SizedBox(height: 16),
-        ],
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text('Call Quality', style: AppTextStyles.headingMedium),
+            const SizedBox(height: 16),
+            ..._qualities.map((o) {
+              final selected = o.$1 == _callQuality;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _PickerTile(
+                  label: o.$1,
+                  subtitle: o.$2,
+                  selected: selected,
+                  onTap: () {
+                    setState(() => _callQuality = o.$1);
+                    _savePref('pref_quality', o.$1);
+                    Navigator.pop(context);
+                  },
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -493,19 +534,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              // Capture router/messenger before async gap.
               final router = GoRouter.of(context);
-              final messenger = ScaffoldMessenger.of(context);
               try {
                 await ApiClient.dio.delete(ApiEndpoints.deleteAccount);
                 await ref.read(authProvider.notifier).logout();
-                if (mounted) router.go('/login');
+                if (!context.mounted) return;
+                router.go('/login');
               } on DioException catch (e) {
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(ApiClient.errorMessage(e))),
-                  );
-                }
+                if (!context.mounted) return;
+                AppSnackBar.error(context, ApiClient.errorMessage(e));
               }
             },
             child: Text('Delete',
@@ -693,6 +730,203 @@ class _Badge extends StatelessWidget {
       child: Text(text,
           style: AppTextStyles.caption.copyWith(
               color: color, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+// ── Profile Hero Card ─────────────────────────────────────────────────────────
+
+class _ProfileHeader extends StatelessWidget {
+  final dynamic user; // UserModel or null
+  final VoidCallback onEditTap;
+
+  const _ProfileHeader({required this.user, required this.onEditTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withValues(alpha: 0.12),
+                  AppColors.accent.withValues(alpha: 0.06),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.22),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Avatar with gradient ring
+                Container(
+                  padding: const EdgeInsets.all(2.5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.primaryGradient,
+                  ),
+                  child: CircleAvatar(
+                    radius: 34,
+                    backgroundColor: AppColors.card,
+                    backgroundImage: user?.avatar != null
+                        ? NetworkImage(user!.avatar as String)
+                        : null,
+                    child: user?.avatar == null
+                        ? Text(
+                            (user?.name as String? ?? 'U')
+                                .substring(0, 1)
+                                .toUpperCase(),
+                            style: AppTextStyles.headingMedium.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?.name as String? ?? 'Your Name',
+                        style: AppTextStyles.headingSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        user?.phone as String? ?? '',
+                        style: AppTextStyles.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                // Edit button
+                GestureDetector(
+                  onTap: onEditTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.edit_rounded,
+                            color: Colors.white, size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Edit',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Picker Tile (language / quality sheet) ────────────────────────────────────
+
+class _PickerTile extends StatelessWidget {
+  final String label;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PickerTile({
+    required this.label,
+    this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.18),
+                    AppColors.accent.withValues(alpha: 0.10),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.45)
+                : AppColors.border,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTextStyles.labelLarge.copyWith(
+                      color: selected
+                          ? AppColors.primaryLight
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle!, style: AppTextStyles.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+            if (selected)
+              ShaderMask(
+                shaderCallback: (b) =>
+                    AppColors.primaryGradient.createShader(b),
+                child: const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 20),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

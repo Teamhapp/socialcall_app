@@ -6,7 +6,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/api/api_client.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/gender_picker.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -25,6 +27,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePass = true;
   bool _obscureConf = true;
   String _countryCode = '+91';
+  String? _selectedGender;
 
   // (flag, name, dialCode)
   static const _countryData = [
@@ -80,6 +83,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _fullPhone,
         password,
         name: name.isEmpty ? null : name,
+        gender: _selectedGender,
       );
       if (mounted) context.go('/home');
     } catch (e) {
@@ -96,10 +100,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : null,
-    ));
+    if (isError) {
+      AppSnackBar.error(context, msg);
+    } else {
+      AppSnackBar.info(context, msg);
+    }
   }
 
   @override
@@ -288,6 +293,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         obscure: _obscureConf,
                         onToggle: () =>
                             setState(() => _obscureConf = !_obscureConf),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // ── Gender (optional) ─────────────────────────────────
+                      Text('Gender (optional)', style: AppTextStyles.labelLarge),
+                      const SizedBox(height: 12),
+                      GenderPicker(
+                        selected: _selectedGender,
+                        onChanged: (v) => setState(() => _selectedGender = v),
                       ),
 
                       const SizedBox(height: 32),
