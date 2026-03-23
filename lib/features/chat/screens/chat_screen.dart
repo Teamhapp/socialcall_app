@@ -31,6 +31,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   bool _isTyping = false;
   bool _isLoadingHistory = true;
+  bool _historyError = false;
   bool _isStartingCall = false;
   final List<MessageModel> _messages = [];
 
@@ -50,6 +51,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   // ── Load chat history ────────────────────────────────────────────────────────
 
   Future<void> _loadHistory() async {
+    setState(() { _historyError = false; _isLoadingHistory = true; });
     try {
       // BUG FIX: use host.userId (users-table ID), not host.id (hosts-table ID).
       // Messages are stored with sender_id / receiver_id = user IDs.
@@ -70,7 +72,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _scrollToBottom();
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoadingHistory = false);
+      if (mounted) setState(() { _historyError = true; _isLoadingHistory = false; });
     }
   }
 
@@ -294,8 +296,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child:
                         CircularProgressIndicator(color: AppColors.primary),
                   )
-                : _messages.isEmpty
+                : _historyError
                     ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.wifi_off_rounded,
+                                  size: 48, color: AppColors.textHint),
+                              const SizedBox(height: 12),
+                              Text('Could not load messages',
+                                  style: AppTextStyles.bodyMedium),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _loadHistory,
+                                child: Text('Retry',
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                        color: AppColors.primary)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _messages.isEmpty
+                        ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -369,6 +394,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: TextField(
                     controller: _messageController,
                     onChanged: _onTextChanged,
+                    onSubmitted: (_) => _sendMessage(),
+                    textInputAction: TextInputAction.send,
                     style: AppTextStyles.bodyLarge,
                     maxLines: null,
                     decoration: InputDecoration(

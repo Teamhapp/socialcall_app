@@ -37,6 +37,7 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
   List<ReviewModel> _reviews = [];
   int _totalReviews = 0;
   bool _reviewsLoading = true;
+  bool _reviewsError = false;
 
   @override
   void initState() {
@@ -65,7 +66,7 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _reviewsLoading = false);
+      if (mounted) setState(() { _reviewsError = true; _reviewsLoading = false; });
     }
   }
 
@@ -696,6 +697,8 @@ class _HostProfileScreenState extends ConsumerState<HostProfileScreen> {
                     totalReviews: _totalReviews,
                     avgRating: widget.host.rating,
                     isLoading: _reviewsLoading,
+                    isError: _reviewsError,
+                    onRetry: _loadReviews,
                   ),
                 ),
               ),
@@ -733,12 +736,16 @@ class _ReviewsSection extends StatelessWidget {
   final int totalReviews;
   final double avgRating;
   final bool isLoading;
+  final bool isError;
+  final VoidCallback onRetry;
 
   const _ReviewsSection({
     required this.reviews,
     required this.totalReviews,
     required this.avgRating,
     required this.isLoading,
+    required this.isError,
+    required this.onRetry,
   });
 
   @override
@@ -867,6 +874,31 @@ class _ReviewsSection extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(20),
               child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          )
+        // Error state
+        else if (isError)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.star_border_rounded,
+                      size: 40,
+                      color: AppColors.textHint.withValues(alpha: 0.5)),
+                  const SizedBox(height: 10),
+                  Text('Could not load reviews',
+                      style: AppTextStyles.bodySmall),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: onRetry,
+                    child: Text('Retry',
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.primary)),
+                  ),
+                ],
+              ),
             ),
           )
         // Empty state

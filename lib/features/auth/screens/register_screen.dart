@@ -206,6 +206,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           child: TextField(
                             controller: _nameController,
                             textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            onSubmitted: (_) =>
+                                FocusScope.of(context).nextFocus(),
                             style: AppTextStyles.bodyLarge,
                             decoration: const InputDecoration(
                               hintText: 'Your name',
@@ -274,6 +277,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               child: TextField(
                                 controller: _phoneController,
                                 keyboardType: TextInputType.phone,
+                                textInputAction: TextInputAction.next,
+                                onSubmitted: (_) =>
+                                    FocusScope.of(context).nextFocus(),
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
                                   LengthLimitingTextInputFormatter(10),
@@ -308,6 +314,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             setState(() => _passwordFocused = v),
                         onToggle: () =>
                             setState(() => _obscurePass = !_obscurePass),
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) =>
+                            FocusScope.of(context).nextFocus(),
                       ),
 
                       const SizedBox(height: 20),
@@ -324,6 +333,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             setState(() => _confirmFocused = v),
                         onToggle: () =>
                             setState(() => _obscureConf = !_obscureConf),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _register(),
                       ),
 
                       const SizedBox(height: 20),
@@ -389,6 +400,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     required bool focused,
     required ValueChanged<bool> onFocusChange,
     required VoidCallback onToggle,
+    TextInputAction textInputAction = TextInputAction.next,
+    ValueChanged<String>? onSubmitted,
   }) {
     return Focus(
       onFocusChange: onFocusChange,
@@ -405,6 +418,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       child: TextField(
         controller: controller,
         obscureText: obscure,
+        textInputAction: textInputAction,
+        onSubmitted: onSubmitted,
         style: AppTextStyles.bodyLarge,
         decoration: InputDecoration(
           hintText: hintText,

@@ -22,7 +22,7 @@ class _OnlineBadgeState extends State<OnlineBadge>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 2800),
     );
     _pulse = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
@@ -82,7 +82,7 @@ class _OnlineBadgeState extends State<OnlineBadge>
               // Ripple ring
               AnimatedBuilder(
                 animation: _pulse,
-                builder: (_, __) => Container(
+                builder: (_, _) => Container(
                   width: 14 * _pulse.value,
                   height: 14 * _pulse.value,
                   decoration: BoxDecoration(

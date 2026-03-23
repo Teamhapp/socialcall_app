@@ -222,6 +222,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).nextFocus(),
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(10),
@@ -265,6 +268,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: TextField(
                       controller: _passwordController,
                       obscureText: _obscurePass,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _loginWithPassword(),
                       style: AppTextStyles.bodyLarge,
                       decoration: InputDecoration(
                         hintText: 'Enter your password',

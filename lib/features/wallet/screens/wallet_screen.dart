@@ -12,6 +12,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/wallet_provider.dart';
 import '../../../models/transaction_model.dart';
 import '../../../shared/widgets/gradient_button.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 
 // Bonus coins per purchase tier: amount → coins credited
 const _bonusTiers = {
@@ -35,6 +36,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
     with SingleTickerProviderStateMixin {
   bool _isProcessing = false;
   bool _isRedeeming = false;
+  bool _isApplyingReferral = false;
   late AnimationController _shimmerController;
   late Animation<double> _shimmerAnim;
   late Razorpay _razorpay;
@@ -89,6 +91,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
   // ─── Razorpay recharge ──────────────────────────────────────────────
   Future<void> _startRecharge(int amount) async {
     if (_isProcessing) return;
+    HapticFeedback.mediumImpact();
     setState(() {
       _isProcessing = true;
       _selectedAmount = amount;
@@ -247,24 +250,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
     );
   }
 
-  void _showErrorSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline_rounded,
-                color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text(msg)),
-          ],
-        ),
-        backgroundColor: AppColors.callRed,
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
+  void _showErrorSnack(String msg) => AppSnackBar.error(context, msg);
 
   // ─── Promo code sheet ───────────────────────────────────────────────
   void _showRedeemCodeSheet() {
@@ -353,6 +339,108 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                         } finally {
                           if (mounted) {
                             setState(() => _isRedeeming = false);
+                          }
+                        }
+                      },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Referral code entry sheet ──────────────────────────────────────
+  void _showApplyReferralSheet() {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🎁', style: TextStyle(fontSize: 24)),
+                const SizedBox(width: 10),
+                Text('Enter Referral Code', style: AppTextStyles.headingSmall),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Both you and your friend get ₹50 coins!',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: ctrl,
+              textCapitalization: TextCapitalization.characters,
+              style: AppTextStyles.headingMedium
+                  .copyWith(color: Colors.orange, letterSpacing: 2),
+              decoration: InputDecoration(
+                hintText: 'e.g. ABC12345',
+                hintStyle: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textHint, letterSpacing: 1),
+                prefixIcon:
+                    const Icon(Icons.card_giftcard_rounded, color: Colors.orange),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear_rounded,
+                      color: AppColors.textHint, size: 18),
+                  onPressed: () => ctrl.clear(),
+                ),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            StatefulBuilder(
+              builder: (ctx, setSt) => GradientButton(
+                label: _isApplyingReferral ? 'Applying…' : 'Apply Referral Code',
+                height: 52,
+                isLoading: _isApplyingReferral,
+                icon: _isApplyingReferral
+                    ? null
+                    : const Icon(Icons.redeem_rounded,
+                        color: Colors.white, size: 18),
+                onTap: _isApplyingReferral
+                    ? null
+                    : () async {
+                        final code = ctrl.text.trim().toUpperCase();
+                        if (code.isEmpty) return;
+                        setSt(() => _isApplyingReferral = true);
+                        setState(() => _isApplyingReferral = true);
+                        try {
+                          final res = await ApiClient.dio.post(
+                            ApiEndpoints.applyReferral,
+                            data: {'code': code},
+                          );
+                          if (mounted) {
+                            Navigator.pop(context);
+                            if (res.data['success'] == true) {
+                              AppSnackBar.success(context,
+                                  '🎉 ₹50 coins added! Thanks for using a referral.');
+                              ref.read(walletProvider.notifier).fetchWallet();
+                            } else {
+                              AppSnackBar.error(context,
+                                  res.data['message'] as String? ?? 'Invalid code');
+                            }
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            AppSnackBar.error(context,
+                                e.toString().replaceAll('Exception: ', ''));
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() => _isApplyingReferral = false);
                           }
                         }
                       },
@@ -609,6 +697,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                           minimumSize: const Size(double.infinity, 48),
                           textStyle:
                               AppTextStyles.labelMedium,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // Referral code entry button
+                      OutlinedButton.icon(
+                        onPressed: _showApplyReferralSheet,
+                        icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+                        label: const Text('Have a Referral Code?'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange,
+                          side: const BorderSide(color: Colors.orange, width: 1.5),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          minimumSize: const Size(double.infinity, 48),
+                          textStyle: AppTextStyles.labelMedium,
                         ),
                       ),
 
@@ -1016,7 +1121,7 @@ class _ReferralCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${referralCount} referred',
+                  '$referralCount referred',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.primary, fontWeight: FontWeight.w700),
                 ),

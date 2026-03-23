@@ -373,7 +373,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
   // End-call
   // ─────────────────────────────────────────────────────────────────────────────
 
-  void _endCall() => _endCallInternal();
+  void _endCall() {
+    HapticFeedback.mediumImpact();
+    _endCallInternal();
+  }
 
   void _endCallInternal({String reason = ''}) {
     if (_callEndedByUs) return;

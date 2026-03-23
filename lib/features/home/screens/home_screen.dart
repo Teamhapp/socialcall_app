@@ -313,6 +313,7 @@ class _DiscoveryTabState extends State<_DiscoveryTab> {
   // ── Random Call ─────────────────────────────────────────────────────────────
   Future<void> _startRandomCall({String? gender, bool isVideo = false}) async {
     if (_randomCallLoading) return;
+    HapticFeedback.mediumImpact();
     setState(() => _randomCallLoading = true);
     try {
       // Respect active language filter if one is set

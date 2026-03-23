@@ -53,6 +53,7 @@ class GiftPickerSheet extends ConsumerStatefulWidget {
 class _GiftPickerSheetState extends ConsumerState<GiftPickerSheet> {
   List<Map<String, dynamic>> _gifts = [];
   bool _loading = true;
+  bool _giftsError = false;
   String? _sendingGiftId;
   String? _lastSentGiftName;
 
@@ -73,7 +74,7 @@ class _GiftPickerSheetState extends ConsumerState<GiftPickerSheet> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _giftsError = true; _loading = false; });
     }
   }
 
@@ -205,13 +206,42 @@ class _GiftPickerSheetState extends ConsumerState<GiftPickerSheet> {
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: CircularProgressIndicator(color: AppColors.primary),
                 )
-              : _gifts.isEmpty
+              : _giftsError
                   ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Text('No gifts available',
-                          style: AppTextStyles.bodyMedium),
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.card_giftcard_rounded,
+                              size: 40,
+                              color: AppColors.textHint
+                                  .withValues(alpha: 0.5)),
+                          const SizedBox(height: 10),
+                          Text('Could not load gifts',
+                              style: AppTextStyles.bodySmall),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _giftsError = false;
+                                _loading = true;
+                              });
+                              _loadGifts();
+                            },
+                            child: Text('Retry',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.primary)),
+                          ),
+                        ],
+                      ),
                     )
-                  : GridView.builder(
+                  : _gifts.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 32),
+                          child: Text('No gifts available',
+                              style: AppTextStyles.bodyMedium),
+                        )
+                      : GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
